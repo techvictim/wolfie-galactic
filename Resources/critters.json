@@ -1,0 +1,55 @@
+{
+  "critters": [
+    {
+      "id": "fluffalump",
+      "name": "Fluffalump",
+      "planets": ["wolfie-world"],
+      "move": "waddle",
+      "speed": 1.3,
+      "sound": "critter-boop",
+      "count": 4,
+      "fact": "Fluffalumps hum when they're happy. Their antennae glow brighter near friends."
+    },
+    {
+      "id": "glowbug",
+      "name": "Glowbug",
+      "planets": ["wolfie-world"],
+      "move": "hover",
+      "speed": 2.6,
+      "sound": "critter-chirp",
+      "count": 3,
+      "fact": "Glowbugs light up their tails to say hello."
+    },
+    {
+      "id": "moon-bunny",
+      "name": "Moon Bunny",
+      "planets": ["pup-moon"],
+      "move": "hop",
+      "speed": 2.6,
+      "sound": "critter-squeak",
+      "count": 5,
+      "fact": "In Pup Moon's low gravity, a Moon Bunny can hop over a whole house."
+    },
+    {
+      "id": "crystal-crab",
+      "name": "Crystal Crab",
+      "planets": ["glimmer"],
+      "move": "scuttle",
+      "speed": 1.9,
+      "sound": "critter-click",
+      "count": 5,
+      "fact": "Crystal Crabs walk sideways and grow a new crystal on their shell every year."
+    },
+    {
+      "id": "grumbler",
+      "name": "Grumbler",
+      "planets": ["wolfie-world", "pup-moon", "glimmer"],
+      "move": "waddle",
+      "speed": 2.3,
+      "sound": "grumble",
+      "count": 0,
+      "grumpy": true,
+      "fact": "Grumblers are grumpy because nobody tells them jokes. A few laser zaps send them poofing home."
+    }
+  ]
+}

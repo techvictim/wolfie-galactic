@@ -1,0 +1,198 @@
+{
+  "home": "wolfie-world",
+  "planets": [
+    {
+      "id": "wolfie-world",
+      "name": "Wolfie World",
+      "kind": "Home planet",
+      "seed": 20261028,
+      "gravity": 26,
+      "sky": "#c4b6ff",
+      "stars": false,
+      "mapColors": [
+        "#4fd1b0",
+        "#8a5cff"
+      ],
+      "terrain": {
+        "base": 13,
+        "amplitude": 20,
+        "frequency": 0.035,
+        "surface": 13,
+        "under": 14,
+        "stone": 15,
+        "low": 21,
+        "lowLevel": 18,
+        "trunk": 16,
+        "leaves": 17
+      },
+      "features": {
+        "trees": 0.014,
+        "crystals": 0.004,
+        "crates": 0.002,
+        "craters": 0.0,
+        "settlement": "city",
+        "settlementChance": 0.4
+      },
+      "skyBodies": [
+        {
+          "color": "#d9dcf0",
+          "size": 34,
+          "direction": [
+            -0.55,
+            0.42,
+            -0.72
+          ]
+        },
+        {
+          "color": "#ff9a6b",
+          "size": 16,
+          "direction": [
+            0.7,
+            0.55,
+            -0.45
+          ]
+        }
+      ],
+      "vehicles": [
+        {
+          "kind": "hoverbike",
+          "near": "settlement",
+          "dx": 1,
+          "dz": -26,
+          "yaw": 0
+        }
+      ]
+    },
+    {
+      "id": "pup-moon",
+      "name": "Pup Moon",
+      "kind": "Moon",
+      "seed": 7331,
+      "gravity": 9,
+      "sky": "#14112b",
+      "stars": true,
+      "mapColors": [
+        "#d4d7ea",
+        "#8e93ab"
+      ],
+      "terrain": {
+        "base": 14,
+        "amplitude": 9,
+        "frequency": 0.03,
+        "surface": 18,
+        "under": 18,
+        "stone": 19,
+        "low": 19,
+        "lowLevel": 0,
+        "trunk": 0,
+        "leaves": 0
+      },
+      "features": {
+        "trees": 0.0,
+        "crystals": 0.003,
+        "crates": 0.003,
+        "craters": 0.35,
+        "settlement": "base",
+        "settlementChance": 0.3
+      },
+      "skyBodies": [
+        {
+          "color": "#4fd1b0",
+          "size": 70,
+          "direction": [
+            0.45,
+            0.35,
+            -0.82
+          ]
+        },
+        {
+          "color": "#ff9a6b",
+          "size": 12,
+          "direction": [
+            -0.6,
+            0.6,
+            0.5
+          ]
+        }
+      ],
+      "vehicles": [
+        {
+          "kind": "buggy",
+          "near": "pad",
+          "dx": 10,
+          "dz": 9,
+          "yaw": -1.57
+        }
+      ]
+    },
+    {
+      "id": "glimmer",
+      "name": "Glimmer",
+      "kind": "Crystal planet",
+      "seed": 4242,
+      "gravity": 20,
+      "sky": "#ffc7a6",
+      "stars": false,
+      "mapColors": [
+        "#ff9a6b",
+        "#5fd4ff"
+      ],
+      "terrain": {
+        "base": 12,
+        "amplitude": 26,
+        "frequency": 0.045,
+        "surface": 20,
+        "under": 20,
+        "stone": 15,
+        "low": 21,
+        "lowLevel": 18,
+        "trunk": 0,
+        "leaves": 0
+      },
+      "features": {
+        "trees": 0.0,
+        "crystals": 0.03,
+        "crates": 0.002,
+        "craters": 0.0,
+        "settlement": "mine",
+        "settlementChance": 0.3
+      },
+      "skyBodies": [
+        {
+          "color": "#fff1c2",
+          "size": 46,
+          "direction": [
+            -0.3,
+            0.3,
+            -0.9
+          ]
+        },
+        {
+          "color": "#4fd1b0",
+          "size": 10,
+          "direction": [
+            0.8,
+            0.5,
+            0.3
+          ]
+        }
+      ],
+      "vehicles": [
+        {
+          "kind": "hoverbike",
+          "near": "pad",
+          "dx": 10,
+          "dz": 9,
+          "yaw": -1.57
+        },
+        {
+          "kind": "buggy",
+          "near": "settlement",
+          "dx": -26,
+          "dz": 4,
+          "yaw": 0
+        }
+      ]
+    }
+  ]
+}

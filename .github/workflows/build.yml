@@ -1,0 +1,71 @@
+# Builds the iPad/iPhone, Mac and Apple TV apps on every push, without signing,
+# so compile errors show up here before anyone opens Xcode.
+name: Build
+
+on:
+  push:
+    # Notes and art tools don't change the app, so they don't trigger a build or an upload.
+    paths-ignore: ["**/*.md", "Tools/**", "Docs/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: macos-26
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: iPad and iPhone
+            target: WolfieGalactic-iPad
+            sdk: iphoneos
+          - name: Mac
+            target: WolfieGalactic-Mac
+            sdk: macosx
+          - name: Apple TV
+            target: WolfieGalactic-TV
+            sdk: appletvos
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen
+
+      - name: Build ${{ matrix.name }}
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project WolfieGalactic.xcodeproj \
+            -target "${{ matrix.target }}" \
+            -sdk ${{ matrix.sdk }} \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM="" \
+            2>&1 | tee build.log | grep -E "error:|warning: .*(deprecated|Sendable)|BUILD (SUCCEEDED|FAILED)" || true
+          if ! grep -q "BUILD SUCCEEDED" build.log; then
+            grep -E "error:" build.log | sed "s|$GITHUB_WORKSPACE/||" | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done || true
+            # Anything else that went wrong (a crashed compiler prints no "error:" line).
+            grep -iE "fatal|crash|signal|stack dump|failed|Please submit a bug report" build.log | sed "s|$GITHUB_WORKSPACE/||" | sort -u | head -15 | while IFS= read -r line; do echo "::error::${line:0:900}"; done || true
+            tail -n 12 build.log | while IFS= read -r line; do echo "::notice::${line:0:900}"; done || true
+            exit 1
+          fi
+          grep -E "\.swift:[0-9]+:[0-9]+: warning:" build.log | sed "s|$GITHUB_WORKSPACE/||" | sort -u | head -30 | while IFS= read -r line; do echo "::warning::${line:0:900}"; done || true
+
+      - name: Keep the build log
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-log-${{ matrix.target }}
+          path: build.log

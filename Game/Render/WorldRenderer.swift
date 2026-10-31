@@ -1,0 +1,309 @@
+import Foundation
+import RealityKit
+import simd
+
+/// Keeps the land around the player on screen as they move: detailed chunks close by,
+/// simple far terrain out to the horizon. Chunks are made and meshed in the background.
+@MainActor
+final class WorldRenderer {
+    let root = Entity()
+    private(set) var world: World
+    private let material: UnlitMaterial?
+
+    private var detail: [ChunkKey: ModelEntity] = [:]
+    private var far: [TileKey: (entity: ModelEntity, skipped: Set<ChunkKey>)] = [:]
+    private var pendingDetail = Set<ChunkKey>()
+    private var pendingFar = Set<TileKey>()
+    private var detailQueue: [ChunkKey] = []
+    private var farQueue: [TileKey] = []
+    private var wantedTiles = Set<TileKey>()
+    private var running = 0
+    /// Bumped when the world is swapped, so late background work is thrown away.
+    private var generation = 0
+    private var focusChunk: ChunkKey?
+    private var detailRadius = 0
+    private var farRadius = 0
+    private var detailChanged = false
+    private var lastFarCheck = Date.distantPast
+
+    private static let maxJobs = 3
+    private static let detailBatch = 4
+
+    init(world: World, material: UnlitMaterial?) {
+        self.world = world
+        self.material = material
+    }
+
+    /// Show a different world (a new planet, or a fresh start).
+    func reset(world: World) {
+        self.world = world
+        generation += 1
+        for entity in detail.values { entity.removeFromParent() }
+        for tile in far.values { tile.entity.removeFromParent() }
+        detail.removeAll()
+        far.removeAll()
+        pendingDetail.removeAll()
+        pendingFar.removeAll()
+        detailQueue.removeAll()
+        farQueue.removeAll()
+        wantedTiles.removeAll()
+        focusChunk = nil
+        running = 0
+    }
+
+    /// True once the ground right around a point is on screen.
+    func isReady(around point: SIMD3<Float>) -> Bool {
+        let c = World.key(x: Int(floor(point.x)), z: Int(floor(point.z)))
+        for dz in -2...2 {
+            for dx in -2...2 where detail[ChunkKey(x: c.x + dx, z: c.z + dz)] == nil {
+                return false
+            }
+        }
+        return true
+    }
+
+    // MARK: Every frame
+
+    func update(focus: SIMD3<Float>, detailRadius newDetail: Int, farRadius newFar: Int) {
+        remeshChanged()
+
+        let center = World.key(x: Int(floor(focus.x)), z: Int(floor(focus.z)))
+        if center != focusChunk || newDetail != detailRadius || newFar != farRadius {
+            focusChunk = center
+            detailRadius = newDetail
+            farRadius = newFar
+            plan(around: center)
+        }
+        // While nearby chunks are still arriving, refresh the far land at most once a second.
+        let settled = detailQueue.isEmpty && pendingDetail.isEmpty
+        if detailChanged && (settled || Date().timeIntervalSince(lastFarCheck) > 1) {
+            detailChanged = false
+            checkFarTiles()
+        }
+        startJobs()
+    }
+
+    /// Work out which chunks and far tiles should be on screen.
+    private func plan(around center: ChunkKey) {
+        let r = detailRadius
+        // Drop detailed chunks that are now too far away (with a little slack).
+        for (key, entity) in detail {
+            let dx = key.x - center.x
+            let dz = key.z - center.z
+            if dx * dx + dz * dz > (r + 1) * (r + 1) {
+                entity.removeFromParent()
+                detail[key] = nil
+                detailChanged = true
+            }
+        }
+        // Queue missing detailed chunks, nearest first.
+        var wanted: [(ChunkKey, Int)] = []
+        for dz in -r...r {
+            for dx in -r...r where dx * dx + dz * dz <= r * r {
+                let key = ChunkKey(x: center.x + dx, z: center.z + dz)
+                if detail[key] == nil && !pendingDetail.contains(key) {
+                    wanted.append((key, dx * dx + dz * dz))
+                }
+            }
+        }
+        detailQueue = wanted.sorted { $0.1 < $1.1 }.map { $0.0 }
+
+        // Far tiles out to the far radius.
+        let tileReach = farRadius / TileKey.blocks + 1
+        let centerTile = TileKey.containing(center)
+        let focusX = Float(center.x * World.chunkSize)
+        let focusZ = Float(center.z * World.chunkSize)
+        var tiles = Set<TileKey>()
+        for dz in -tileReach...tileReach {
+            for dx in -tileReach...tileReach {
+                let tile = TileKey(x: centerTile.x + dx, z: centerTile.z + dz)
+                // Distance to the nearest point of the tile.
+                let minX = Float(tile.x * TileKey.blocks)
+                let minZ = Float(tile.z * TileKey.blocks)
+                let nx = min(max(focusX, minX), minX + Float(TileKey.blocks))
+                let nz = min(max(focusZ, minZ), minZ + Float(TileKey.blocks))
+                if simd_distance(SIMD2<Float>(nx, nz), SIMD2<Float>(focusX, focusZ)) <= Float(farRadius) {
+                    tiles.insert(tile)
+                }
+            }
+        }
+        for (tile, value) in far where !tiles.contains(tile) {
+            value.entity.removeFromParent()
+            far[tile] = nil
+        }
+        wantedTiles = tiles
+        checkFarTiles()
+
+        world.forget(outside: r + 4, of: center)
+    }
+
+    /// Queue far tiles that are missing, or whose detailed area changed.
+    private func checkFarTiles() {
+        lastFarCheck = Date()
+        var shown: [TileKey: Set<ChunkKey>] = [:]
+        for key in detail.keys {
+            shown[TileKey.containing(key), default: []].insert(key)
+        }
+        let centerTile = focusChunk.map(TileKey.containing) ?? TileKey(x: 0, z: 0)
+        var queue: [(TileKey, Int)] = []
+        for tile in wantedTiles where !pendingFar.contains(tile) {
+            let skipped = shown[tile] ?? []
+            if let existing = far[tile], existing.skipped == skipped { continue }
+            let dx = tile.x - centerTile.x
+            let dz = tile.z - centerTile.z
+            queue.append((tile, dx * dx + dz * dz))
+        }
+        farQueue = queue.sorted { $0.1 < $1.1 }.map { $0.0 }
+    }
+
+    // MARK: Background work
+
+    private func startJobs() {
+        while running < WorldRenderer.maxJobs {
+            if !detailQueue.isEmpty {
+                let batch = Array(detailQueue.prefix(WorldRenderer.detailBatch))
+                detailQueue.removeFirst(batch.count)
+                startDetail(batch)
+            } else if !farQueue.isEmpty {
+                let tile = farQueue.removeFirst()
+                startFar(tile)
+            } else {
+                break
+            }
+        }
+    }
+
+    private struct DetailResult: Sendable {
+        let key: ChunkKey
+        let mesh: MeshBuilder
+    }
+
+    private func startDetail(_ keys: [ChunkKey]) {
+        // Hand over the chunks already in memory; the rest are made in the background.
+        var known: [ChunkKey: [UInt8]] = [:]
+        for key in keys {
+            for k in [key, ChunkKey(x: key.x + 1, z: key.z), ChunkKey(x: key.x - 1, z: key.z),
+                      ChunkKey(x: key.x, z: key.z + 1), ChunkKey(x: key.x, z: key.z - 1)] {
+                if let blocks = world.cachedChunk(k) { known[k] = blocks }
+            }
+            pendingDetail.insert(key)
+        }
+        let generator = world.generator
+        let token = generation
+        running += 1
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var chunks = known
+            var made: [ChunkKey: [UInt8]] = [:]
+            func get(_ k: ChunkKey) -> [UInt8] {
+                if let blocks = chunks[k] { return blocks }
+                let blocks = generator.generateChunk(k)
+                chunks[k] = blocks
+                made[k] = blocks
+                return blocks
+            }
+            var results: [DetailResult] = []
+            for key in keys {
+                let mesh = VoxelMesher.chunk(
+                    get(key),
+                    east: get(ChunkKey(x: key.x + 1, z: key.z)),
+                    west: get(ChunkKey(x: key.x - 1, z: key.z)),
+                    south: get(ChunkKey(x: key.x, z: key.z + 1)),
+                    north: get(ChunkKey(x: key.x, z: key.z - 1))
+                )
+                results.append(DetailResult(key: key, mesh: mesh))
+            }
+            let finished = results
+            let madeChunks = made
+            await self?.finishDetail(finished, made: madeChunks, token: token)
+        }
+    }
+
+    private func finishDetail(_ results: [DetailResult], made: [ChunkKey: [UInt8]], token: Int) {
+        guard token == generation else { return }
+        running -= 1
+        for (key, blocks) in made { world.store(key, blocks) }
+        for result in results {
+            pendingDetail.remove(result.key)
+            guard isWanted(result.key) else { continue }
+            show(result.mesh, for: result.key)
+        }
+        detailChanged = true
+    }
+
+    private func startFar(_ tile: TileKey) {
+        var skipped = Set<ChunkKey>()
+        for key in detail.keys where TileKey.containing(key) == tile { skipped.insert(key) }
+        pendingFar.insert(tile)
+        let generator = world.generator
+        let token = generation
+        let skip = skipped
+        running += 1
+        Task.detached(priority: .utility) { [weak self] in
+            let mesh = FarMesher.tile(tile, generator: generator, skipping: skip)
+            await self?.finishFar(tile, mesh: mesh, skipped: skip, token: token)
+        }
+    }
+
+    private func finishFar(_ tile: TileKey, mesh builder: MeshBuilder, skipped: Set<ChunkKey>, token: Int) {
+        guard token == generation else { return }
+        running -= 1
+        pendingFar.remove(tile)
+        guard wantedTiles.contains(tile) else { return }
+        let entity = far[tile]?.entity ?? {
+            let e = ModelEntity()
+            e.position = SIMD3<Float>(Float(tile.x * TileKey.blocks), 0, Float(tile.z * TileKey.blocks))
+            root.addChild(e)
+            return e
+        }()
+        if let material, let mesh = try? builder.mesh(name: "far-\(tile.x)-\(tile.z)") {
+            entity.model = ModelComponent(mesh: mesh, materials: [material])
+            entity.isEnabled = true
+        } else {
+            entity.model = nil
+            entity.isEnabled = false
+        }
+        far[tile] = (entity, skipped)
+        // The detailed area may have moved on while this was being built.
+        detailChanged = true
+    }
+
+    private func isWanted(_ key: ChunkKey) -> Bool {
+        guard let c = focusChunk else { return false }
+        let dx = key.x - c.x
+        let dz = key.z - c.z
+        return dx * dx + dz * dz <= (detailRadius + 1) * (detailRadius + 1)
+    }
+
+    private func show(_ builder: MeshBuilder, for key: ChunkKey) {
+        let entity = detail[key] ?? {
+            let e = ModelEntity()
+            e.position = SIMD3<Float>(Float(key.x * World.chunkSize), 0, Float(key.z * World.chunkSize))
+            root.addChild(e)
+            return e
+        }()
+        if let material, let mesh = try? builder.mesh(name: "chunk-\(key.x)-\(key.z)") {
+            entity.model = ModelComponent(mesh: mesh, materials: [material])
+            entity.isEnabled = true
+        } else {
+            entity.model = nil
+            entity.isEnabled = false
+        }
+        detail[key] = entity
+    }
+
+    // MARK: Building and blasting
+
+    /// Rebuild chunks the player just changed, right away, so edits show up in the same frame.
+    private func remeshChanged() {
+        for key in world.takeChanged() where detail[key] != nil {
+            let mesh = VoxelMesher.chunk(
+                world.chunkData(key),
+                east: world.chunkData(ChunkKey(x: key.x + 1, z: key.z)),
+                west: world.chunkData(ChunkKey(x: key.x - 1, z: key.z)),
+                south: world.chunkData(ChunkKey(x: key.x, z: key.z + 1)),
+                north: world.chunkData(ChunkKey(x: key.x, z: key.z - 1))
+            )
+            show(mesh, for: key)
+        }
+    }
+}

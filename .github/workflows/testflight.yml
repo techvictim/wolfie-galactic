@@ -1,0 +1,196 @@
+# Signs Wolfie Galactic and uploads it to TestFlight for Apple TV, iPad/iPhone and Mac.
+#
+# Runs by itself after every change to main that passes the Build check, so new versions
+# reach every device without anyone opening Xcode. It can also be started by hand
+# (Actions › TestFlight › Run workflow). It needs three repository secrets from an
+# App Store Connect API key:
+#   ASC_KEY_ID      Key ID
+#   ASC_ISSUER_ID   Issuer ID
+#   ASC_KEY_P8      the whole text of the downloaded AuthKey_XXXX.p8 file
+# Signing is automatic: Xcode uses the key to create certificates and profiles itself.
+name: TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Which apps to upload"
+        type: choice
+        default: all
+        options: [all, Apple TV, iPad and iPhone, Mac]
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+    branches: [main]
+
+# One upload at a time. If several changes land while one is uploading, only the newest
+# waits its turn; the ones in between are skipped.
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: ${{ matrix.name }}
+    # After a Build run: only when it passed, on main, for a pushed change.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple TV
+            scheme: WolfieGalactic-TV
+            destination: generic/platform=tvOS
+          - name: iPad and iPhone
+            scheme: WolfieGalactic-iPad
+            destination: generic/platform=iOS
+          - name: Mac
+            scheme: WolfieGalactic-Mac
+            destination: generic/platform=macOS
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      CHOSEN: ${{ github.event.inputs.platforms || 'all' }}
+    steps:
+      - name: Check this app was chosen and the key is set up
+        id: gate
+        run: |
+          if [ "$CHOSEN" != "all" ] && [ "$CHOSEN" != "${{ matrix.name }}" ]; then
+            echo "Skipping ${{ matrix.name }}."; echo "run=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "::error::Add the ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8 secrets first."; exit 1
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.run == 'true'
+        with:
+          # Exactly the version the Build check passed.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Generate the Xcode project
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          xcodebuild -version
+          brew install xcodegen
+          xcodegen
+
+      - name: Write the API key
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          # Rebuild the key cleanly: pasting into the secret box can lose line breaks or add
+          # stray spaces and quotes. Also accepts the whole file encoded with base64.
+          python3 - "$RUNNER_TEMP/asc/AuthKey.p8" <<'PY'
+          import base64, os, re, sys
+          raw = os.environ["ASC_KEY_P8"]
+          text = raw.replace("\\n", "\n")
+          if "PRIVATE KEY" not in text:
+              try:
+                  text = base64.b64decode(re.sub(r"\s", "", text)).decode()
+              except Exception:
+                  pass
+          body = re.sub(r"-----(BEGIN|END)[A-Z ]*-----", "", text)
+          body = re.sub(r"[^A-Za-z0-9+/=]", "", body)
+          if len(body) < 100:
+              print("::error::ASC_KEY_P8 does not look like an App Store Connect key (.p8)."); sys.exit(1)
+          lines = [body[i:i + 64] for i in range(0, len(body), 64)]
+          pem = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(lines) + "\n-----END PRIVATE KEY-----\n"
+          open(sys.argv[1], "w").write(pem)
+          print(f"Key rebuilt: {len(body)} characters of key data.")
+          PY
+          echo "KEY_PATH=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
+          # Every upload needs a new build number; the run number always goes up.
+          echo "BUILD_NUMBER=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+
+      - name: Archive ${{ matrix.name }}
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project WolfieGalactic.xcodeproj \
+            -scheme "${{ matrix.scheme }}" \
+            -configuration Release \
+            -destination "${{ matrix.destination }}" \
+            -archivePath "$RUNNER_TEMP/app.xcarchive" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            WG_BUILD_COMMIT="$(git rev-parse --short HEAD)" \
+            WG_BUILD_DATE="$(TZ=America/New_York date '+%b %-d %-I:%M %p')" \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee archive.log | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" || true
+          if ! grep -q "ARCHIVE SUCCEEDED" archive.log; then
+            grep -E "error|rror:" archive.log | sort -u | head -25 | while IFS= read -r line; do echo "::error::${line:0:900}"; done || true
+            exit 1
+          fi
+
+      # The archive is built unsigned, so no development certificate is ever needed (each new
+      # GitHub machine used to make one, and Apple only allows a few). It gets a stand-in
+      # signature carrying its entitlements (the Mac sandbox); the upload step re-signs it
+      # for the App Store with Apple's cloud-managed distribution certificate.
+      - name: Add entitlements
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          app=$(find "$RUNNER_TEMP/app.xcarchive/Products/Applications" -maxdepth 1 -name "*.app" | head -1)
+          entitlements=""
+          if [ "${{ matrix.scheme }}" = "WolfieGalactic-Mac" ]; then entitlements="Generated/Mac.entitlements"; fi
+          if [ -n "$entitlements" ]; then
+            codesign --force --deep --sign - --entitlements "$entitlements" "$app"
+          else
+            codesign --force --deep --sign - "$app"
+          fi
+          codesign -d --entitlements - "$app" 2>/dev/null | head -20 || true
+
+      - name: Upload to TestFlight
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>299JWH22HW</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>testFlightInternalTestingOnly</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/app.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            2>&1 | tee upload.log | grep -E "error|Upload succeeded|EXPORT (SUCCEEDED|FAILED)" || true
+          if ! grep -qE "EXPORT SUCCEEDED|Upload succeeded" upload.log; then
+            grep -iE "error" upload.log | sort -u | head -25 | while IFS= read -r line; do echo "::error::${line:0:900}"; done || true
+            exit 1
+          fi
+          echo "Uploaded ${{ matrix.name }} build $BUILD_NUMBER. It shows up in TestFlight after Apple processes it (usually 10–30 minutes)."
+
+      - name: Keep the logs
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v5
+        with:
+          name: testflight-logs-${{ matrix.scheme }}
+          path: |
+            archive.log
+            upload.log
+          if-no-files-found: ignore
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc"

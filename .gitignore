@@ -1,0 +1,8 @@
+# Xcode
+WolfieGalactic.xcodeproj/
+Generated/
+xcuserdata/
+DerivedData/
+.DS_Store
+*.wgworld
+Tools/__pycache__/

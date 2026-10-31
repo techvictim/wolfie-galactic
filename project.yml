@@ -1,0 +1,152 @@
+# Wolfie Galactic — Xcode project definition.
+# Generate the Xcode project with:  xcodegen
+# (install once with:  brew install xcodegen)
+
+name: WolfieGalactic
+options:
+  bundleIdPrefix: design.mancuso
+  createIntermediateGroups: true
+  xcodeVersion: "26.0"
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "26.0"
+    tvOS: "26.0"
+
+attributes:
+  LastUpgradeCheck: "2600"
+  BuildIndependentTargetsInParallel: YES
+
+settings:
+  base:
+    # Xcode 26 recommended settings
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_STRICT_OBJC_MSGSEND: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    STRING_CATALOG_GENERATE_SYMBOLS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1"
+    # Raise this by one for every TestFlight upload (or let Xcode do it when distributing).
+    CURRENT_PROJECT_VERSION: "1"
+    # Filled in by the TestFlight upload with the commit and date it was built from.
+    WG_BUILD_COMMIT: "local"
+    WG_BUILD_DATE: "Xcode"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: 299JWH22HW
+    PRODUCT_BUNDLE_IDENTIFIER: design.mancuso.wolfiegalactic
+    PRODUCT_NAME: "Wolfie Galactic"
+    ENABLE_PREVIEWS: NO
+
+targets:
+  WolfieGalactic-iPad:
+    type: application
+    scheme: {}
+    platform: iOS
+    sources:
+      - path: Game
+      - path: Resources
+        buildPhase: resources
+      - path: AppIcons/iOS.xcassets
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: Generated/iOS-Info.plist
+      properties:
+        CFBundleDisplayName: Wolfie Galactic
+        NSLocalNetworkUsageDescription: Wolfie Galactic looks for friends' games on your Wi-Fi so you can build together.
+        NSBonjourServices:
+          - _wolfiegalactic._tcp
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WGBuildCommit: $(WG_BUILD_COMMIT)
+        WGBuildDate: $(WG_BUILD_DATE)
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UIStatusBarHidden: true
+        # Landscape-only on iPad needs this, or App Store Connect rejects the upload.
+        # Xcode calls it deprecated; that warning is expected.
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        GCSupportsControllerUserInteraction: true
+        GCSupportsGameMode: true
+        GCSupportedGameControllers:
+          - ProfileName: ExtendedGamepad
+
+  WolfieGalactic-Mac:
+    type: application
+    scheme: {}
+    platform: macOS
+    sources:
+      - path: Game
+      - path: Resources
+        buildPhase: resources
+      - path: AppIcons/macOS.xcassets
+    entitlements:
+      path: Generated/Mac.entitlements
+      properties:
+        # The Mac App Store and TestFlight require the sandbox.
+        com.apple.security.app-sandbox: true
+        # Multiplayer: join friends' games and host your own.
+        com.apple.security.network.client: true
+        com.apple.security.network.server: true
+        # Game controllers over Bluetooth and USB.
+        com.apple.security.device.bluetooth: true
+        com.apple.security.device.usb: true
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: Generated/Mac-Info.plist
+      properties:
+        CFBundleDisplayName: Wolfie Galactic
+        NSLocalNetworkUsageDescription: Wolfie Galactic looks for friends' games on your Wi-Fi so you can build together.
+        NSBonjourServices:
+          - _wolfiegalactic._tcp
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WGBuildCommit: $(WG_BUILD_COMMIT)
+        WGBuildDate: $(WG_BUILD_DATE)
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.kids-games
+        GCSupportsControllerUserInteraction: true
+        GCSupportsGameMode: true
+        GCSupportedGameControllers:
+          - ProfileName: ExtendedGamepad
+
+  WolfieGalactic-TV:
+    type: application
+    scheme: {}
+    platform: tvOS
+    sources:
+      - path: Game
+      - path: Resources
+        buildPhase: resources
+      - path: AppIcons/tvOS.xcassets
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
+    info:
+      path: Generated/TV-Info.plist
+      properties:
+        CFBundleDisplayName: Wolfie Galactic
+        NSLocalNetworkUsageDescription: Wolfie Galactic looks for friends' games on your Wi-Fi so you can build together.
+        NSBonjourServices:
+          - _wolfiegalactic._tcp
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WGBuildCommit: $(WG_BUILD_COMMIT)
+        WGBuildDate: $(WG_BUILD_DATE)
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        GCSupportsControllerUserInteraction: true
+        GCSupportedGameControllers:
+          - ProfileName: ExtendedGamepad
