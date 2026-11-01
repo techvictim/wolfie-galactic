@@ -108,8 +108,9 @@ jobs:
           print(f"Key rebuilt: {len(body)} characters of key data.")
           PY
           echo "KEY_PATH=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
-          # Every upload needs a new build number; the run number always goes up.
-          echo "BUILD_NUMBER=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          # Every upload needs a new build number; the run number always goes up. (Builds before
+          # this repository went public reached 120, so numbering starts at 200.)
+          echo "BUILD_NUMBER=$((200 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
 
       - name: Archive ${{ matrix.name }}
         if: steps.gate.outputs.run == 'true'
