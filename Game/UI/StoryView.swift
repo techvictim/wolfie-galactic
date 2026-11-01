@@ -78,3 +78,12 @@ enum GamePicture {
         return image
     }
 }
+
+extension Game {
+    /// The sky colour of the planet you're on (or about to land on).
+    var planetSkyColor: Color {
+        let id = place == .space ? space.planetID : planet.id
+        let c = BlockRegistry.parseHex(PlanetCatalog.shared.planet(id: id)?.sky ?? planet.sky)
+        return Color(red: Double(c.x), green: Double(c.y), blue: Double(c.z))
+    }
+}

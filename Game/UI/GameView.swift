@@ -84,6 +84,12 @@ struct GameView: View {
                     .transition(.opacity)
             }
 
+            if game.entryVeil > 0.001 {
+                AtmosphereVeil(veil: game.entryVeil, sky: game.planetSkyColor)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+
             if game.entryGlow {
                 EntryGlow()
                     .ignoresSafeArea()
@@ -234,6 +240,21 @@ struct HUDView: View {
                     .padding(.vertical, 10)
                     .background(Capsule().fill(Color.black.opacity(0.55)))
                     .allowsHitTesting(false)
+                } else if let target = game.hyperTarget, game.place == .space, !game.starMapOpen,
+                          let destination = PlanetCatalog.shared.planet(id: target) {
+                    HStack(spacing: 10) {
+                        ButtonBadge(letter: game.keyboardMode ? "M" : Btn.square)
+                        Text("Hyperspace to \(destination.name)")
+                            .font(.game(20).weight(.bold))
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(Color(red: 0.55, green: 0.85, blue: 1))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(Color(red: 0.1, green: 0.2, blue: 0.45).opacity(0.75)))
+                    .overlay(Capsule().stroke(Color(red: 0.55, green: 0.85, blue: 1), lineWidth: 2))
+                    .onTapGesture { game.startHyperspace(to: destination) }
                 } else if let kind = game.dockPrompt, game.place == .space, !game.starMapOpen {
                     HStack(spacing: 10) {
                         ButtonBadge(letter: game.keyboardMode ? "F" : Btn.use)
@@ -374,6 +395,37 @@ struct HelpCard: View {
 }
 
 /// Coming down through an atmosphere: orange heat around the edges, flickering.
+/// Coming down through an atmosphere: the sky's colour with blocky clouds rushing past (upward,
+/// since you're falling), thick enough in the middle to hide the swap from space to the ground.
+struct AtmosphereVeil: View {
+    let veil: Float
+    let sky: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { context, size in
+                let v = Double(veil)
+                context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(sky.opacity(min(1, v * 1.15))))
+                // Clouds made of a few toy blocks each, racing up the screen.
+                for i in 0..<26 {
+                    let seed = Double(i) * 12.9898
+                    let x = (sin(seed) * 0.5 + 0.5) * size.width
+                    let speed = 0.25 + (sin(seed * 2.1) * 0.5 + 0.5) * 0.5
+                    let y = size.height * (1.2 - ((t * speed + Double(i) * 0.137).truncatingRemainder(dividingBy: 1.4)))
+                    let w = size.width * (0.12 + 0.12 * (cos(seed) * 0.5 + 0.5))
+                    let h = w * 0.35
+                    let alpha = min(1, v * 1.4) * 0.85
+                    var cloud = Path()
+                    cloud.addRect(CGRect(x: x - w / 2, y: y, width: w, height: h))
+                    cloud.addRect(CGRect(x: x - w / 4, y: y - h * 0.5, width: w / 2, height: h * 0.6))
+                    context.fill(cloud, with: .color(Color.white.opacity(alpha)))
+                }
+            }
+        }
+    }
+}
+
 struct EntryGlow: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in

@@ -94,9 +94,16 @@ extension Game {
                 show("No getting out in space: there's no air!")
             }
         }
-        if frame.action {
-            spaceShip = v
-            openStarMap()
+        // Pointing at another planet: □ jumps straight there. Otherwise □ opens the star map.
+        let target = targetedPlanet(v)
+        if hyperTarget != target?.id { hyperTarget = target?.id }
+        if frame.action && entryTime < 0 {
+            if let target {
+                startHyperspace(to: target)
+            } else {
+                spaceShip = v
+                openStarMap()
+            }
             return
         }
 
@@ -121,9 +128,18 @@ extension Game {
         space.far.position = camera.position
         fireBolts(firing: frame.breakHeld, dt: dt, vehicle: v, aim: aim)
 
-        // Fly into the planet to land on it.
-        if distance < space.planetRadius + 6 && !spaceTransition {
+        // Fly into the planet's air to come down through it. The ship never touches the
+        // planet model itself; the clouds take over first.
+        if distance < space.atmosphereRadius && !spaceTransition {
             enterAtmosphere(v)
+        }
+        if entryTime >= 0 {
+            let floor = space.planetRadius * 1.08
+            if distance < floor, distance > 0.01 { v.position = v.position / distance * floor }
+            spaceShip = v
+            space.showShip(v)
+            armory.shake = max(armory.shake, 0.25 * entryVeil + 0.1)
+            shakeCamera()
         }
     }
 
@@ -214,21 +230,55 @@ extension Game {
 
     // MARK: Landing
 
-    /// Down through the clouds, glowing hot, and out over the landing pad.
+    /// The planet you're pointing at, for a quick hyperspace jump.
+    private func targetedPlanet(_ v: Vehicle) -> Planet? {
+        let forward = simd_normalize(v.heading)
+        var best: (Planet, Float)?
+        for p in PlanetCatalog.shared.planets where p.id != space.planetID {
+            guard let d = SpaceScene.direction(of: p.id) else { continue }
+            let dot = simd_dot(forward, d)
+            if dot > 0.96, dot > (best?.1 ?? 0) { best = (p, dot) }
+        }
+        return best?.0
+    }
+
+    /// Down through the atmosphere: the ship glows hot and shakes, clouds rush in until they fill
+    /// the view, then clear to show the planet's sky, still dark up high, brightening as you dive.
     private func enterAtmosphere(_ v: Vehicle) {
         guard let destination = PlanetCatalog.shared.planet(id: space.planetID) else { return }
         spaceTransition = true
         entryGlow = true
+        entryTime = 0
+        hyperTarget = nil
         Sound.shared.play("entry", volume: 0.9)
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_300_000_000)
             guard let self else { return }
             // In a friend's game, the host sends the planet; it's quick on home Wi-Fi.
             let next = destination.id == self.planet.id ? nil : await self.fetchWorld(for: destination)
-            self.arrive(on: destination, in: v, world: next)
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            self.entryGlow = false
-            self.spaceTransition = false
+            // Wait until the clouds cover everything.
+            while self.entryVeil < 0.99 && self.entryTime >= 0 {
+                try? await Task.sleep(nanoseconds: 40_000_000)
+            }
+            let ship = self.spaceShip ?? v
+            self.arrive(on: destination, in: ship, world: next)
+            self.entryTime = -2
+        }
+    }
+
+    /// The clouds of an atmosphere entry, every frame.
+    func updateEntry(dt: Float) {
+        if entryTime >= 0 {
+            entryTime += dt
+            let veil = min(1, max(0, (entryTime - 0.6) / 1.1))
+            if abs(veil - entryVeil) > 0.01 { entryVeil = veil }
+        } else if entryTime <= -2 {
+            let veil = max(0, entryVeil - dt / 1.8)
+            entryVeil = veil
+            if veil < 0.6 && entryGlow { entryGlow = false }
+            if veil <= 0 {
+                entryTime = -1
+                spaceTransition = false
+            }
         }
     }
 
@@ -237,17 +287,18 @@ extension Game {
         let newPlanet = destination.id != planet.id
         place = .surface
         spaceShip = nil
+        hyperTarget = nil
         if newPlanet {
             // Load the planet (this also puts its own starship on its pad).
             land(on: destination, world: next)
         }
         setSurfaceVisible(true)
 
-        // Come in high over the landing pad, heading toward it.
+        // Come out of the clouds high up, where the sky is still dark, diving toward the pad.
         let pad = world.padCenter
-        var ship = Vehicle(kind: kind, position: SIMD3<Float>(Float(pad.x), Game.skyFadeStart + 30, Float(pad.y) + 70), yaw: 0, id: arriving.id)
-        ship.pitch = -0.25
-        ship.speed = kind.topSpeed * 0.6
+        var ship = Vehicle(kind: kind, position: SIMD3<Float>(Float(pad.x), Game.spaceHeight - 10, Float(pad.y) + 150), yaw: 0, id: arriving.id)
+        ship.pitch = -0.38
+        ship.speed = kind.topSpeed * 0.8
         ship.onGround = false
         // If the planet's own starship was waiting on the pad, yours (with the same id) takes its place.
         vehicles[ship.id] = ship

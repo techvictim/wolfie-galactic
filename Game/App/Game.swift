@@ -155,6 +155,12 @@ final class Game {
     var warpGlow: Float = 0
     /// The ship you could swap to at the spaceport.
     var dockPrompt: VehicleKind?
+    /// The planet your ship points at, for a quick hyperspace jump.
+    var hyperTarget: String?
+    /// 0...1: clouds filling the view while coming down through an atmosphere.
+    var entryVeil: Float = 0
+    /// Seconds into an atmosphere entry; -2 while the clouds clear; -1 otherwise.
+    @ObservationIgnored var entryTime: Float = -1
     @ObservationIgnored let space = SpaceScene()
     @ObservationIgnored var spaceShip: Vehicle?
     @ObservationIgnored var spaceTransition = false
@@ -424,6 +430,7 @@ final class Game {
         updateTogether(dt: dt)
         updateMusic()
         effects.update(dt: dt)
+        updateEntry(dt: dt)
         updateGlitchGlow(dt: dt)
         if screen == .playing && place == .surface && travelText == nil {
             updateArmory(dt: dt)

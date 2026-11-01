@@ -493,23 +493,167 @@ def make_track(name, bpm, chords, bars_per_chord, scale, arp_pattern, bass=True,
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", wav, "-c:a", "aac", "-b:a", "128k", out], check=True)
     print(f"  {name}: {total:.0f} s loop")
 
+# ---------- lo-fi 8-bit music ----------
+# Chill lo-fi beats played on chiptune sounds: boom-bap drums with a lazy swing, soft pulse-wave
+# jazz chords, a triangle-wave bass like an old console, a sparse little melody, then tape wobble,
+# vinyl crackle and a gentle bit-crush. Every part wraps around, so each track loops seamlessly.
+
+def chip_wave(freq, seconds, kind="pulse", duty=0.5, wobble=0.0035, vibrato=0.0):
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    f = freq * (1 + wobble * np.sin(2 * np.pi * 0.55 * t) + vibrato * np.sin(2 * np.pi * 5.5 * t) * np.clip(t / 0.25, 0, 1))
+    phase = np.cumsum(f / SR) % 1.0
+    if kind == "tri":
+        wave = 4 * np.abs(phase - 0.5) - 1
+        return np.round(wave * 7.5) / 7.5          # 16 steps, like the NES triangle
+    return np.where(phase < duty, 1.0, -1.0)
+
+def chip_noise(seconds, periodic=False, seed=0):
+    """The NES noise channel: random levels held for a few samples (or a short repeating pattern)."""
+    n = int(seconds * SR)
+    r = np.random.default_rng(seed)
+    hold = 3 if not periodic else 23
+    vals = r.choice([-1.0, 1.0], size=n // hold + 2)
+    if periodic:
+        vals = np.tile(vals[:31], n // (31 * hold) + 2)
+    return np.repeat(vals, hold)[:n]
+
+def note_env(n, attack, decay, sustain=0.0):
+    t = np.arange(n) / SR
+    e = np.minimum(1, t / max(attack, 1e-4)) * (sustain + (1 - sustain) * np.exp(-t / max(decay, 1e-4)))
+    tail = min(n, int(0.02 * SR))
+    e[-tail:] *= np.linspace(1, 0, tail)
+    return e
+
+def lofi_kick():
+    n = int(0.32 * SR)
+    t = np.arange(n) / SR
+    f = 48 + 90 * np.exp(-t * 28)
+    body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 9)
+    click = chip_noise(0.01, seed=3)[: int(0.01 * SR)] * 0.25
+    body[: len(click)] += click
+    return body
+
+def lofi_snare():
+    n = int(0.25 * SR)
+    t = np.arange(n) / SR
+    tone = chip_wave(190, 0.25, "tri") * np.exp(-t * 22) * 0.5
+    noise = lowpass(chip_noise(0.25, seed=9), 5200) * np.exp(-t * 14)
+    return tone + noise * 0.8
+
+def lofi_hat(open_hat=False):
+    d = 0.18 if open_hat else 0.05
+    n = int(d * SR)
+    t = np.arange(n) / SR
+    return highpass(chip_noise(d, periodic=True, seed=4), 6000) * np.exp(-t * (14 if open_hat else 70))
+
+def make_lofi(name, bpm, chords, seed, scale, bass_walk=True, lead=0.45, swing=0.6, bright=2600):
+    rng = np.random.default_rng(seed)
+    beat = 60 / bpm
+    bar = beat * 4
+    bars_per_chord = 2
+    total = bar * bars_per_chord * len(chords) * 2      # the progression twice, the second time with a tune
+    n = int(total * SR)
+    drums = np.zeros(n)
+    keys = np.zeros(n)
+    bass = np.zeros(n)
+    tune = np.zeros(n)
+    kick_times = []
+
+    def swung(step):
+        """Eighth-note steps, with the off-beats pushed late."""
+        return (step // 2) * beat + (step % 2) * beat * swing
+
+    kick, snare = lofi_kick(), lofi_snare()
+    hat, open_hat = lofi_hat(), lofi_hat(True)
+    bars = int(round(total / bar))
+    for b in range(bars):
+        t0 = b * bar
+        # Boom-bap: kick on 1 and the "and" of 2 (sometimes 3), snare on 2 and 4.
+        for step in ([0, 3] if b % 2 == 0 else [0, 3, 5]):
+            add_wrapped(drums, kick * 0.95, t0 + swung(step))
+            kick_times.append(t0 + swung(step))
+        for step in (2, 6):
+            add_wrapped(drums, snare * 0.55, t0 + swung(step) + 0.012)
+        for step in range(8):
+            if rng.random() < 0.9:
+                h = open_hat if (step == 7 and b % 4 == 3) else hat
+                add_wrapped(drums, h * (0.15 if step % 2 == 0 else 0.1) * rng.uniform(0.8, 1.1), t0 + swung(step))
+
+    for c in range(len(chords) * 2):
+        chord = chords[c % len(chords)]
+        start = c * bars_per_chord * bar
+        # Soft chords: a hit on 1, another on the "and" of 2, like a lazy keys player.
+        for hit, length in ((0, beat * 1.6), (3, beat * 2.4), (8, beat * 1.6), (11, beat * 2.2)):
+            when = start + swung(hit) + rng.uniform(0, 0.02)
+            for k, note in enumerate(chord):
+                f = hz(note)
+                wave = chip_wave(f, length, "pulse", duty=0.5 if k % 2 == 0 else 0.25)
+                tone = lowpass(wave, bright) * note_env(len(wave), 0.02, length * 0.7, 0.35)
+                add_wrapped(keys, tone * 0.06, when + k * 0.012)
+        # Triangle bass: the root, then a step toward the next chord.
+        root = hz(chord[0]) / 2
+        nxt = hz(chords[(c + 1) % len(chords)][0]) / 2
+        line = [(0, root, beat * 1.4), (3, root, beat * 0.9), (8, root * 1.5, beat * 1.2)]
+        if bass_walk:
+            line.append((11, (root + nxt) / 2 if abs(nxt - root) > 1 else root * 2 ** (2 / 12), beat * 1.0))
+        for step, f, length in line:
+            wave = chip_wave(f, length, "tri", wobble=0.001)
+            add_wrapped(bass, wave * note_env(len(wave), 0.005, length * 0.8, 0.5) * 0.32, start + swung(step))
+        # A little tune the second time round.
+        if c >= len(chords):
+            step = 0
+            while step < 16:
+                if rng.random() < lead:
+                    length_steps = int(rng.choice([1, 2, 3, 4]))
+                    note = scale[int(rng.integers(len(scale)))]
+                    f = hz(note) * 2
+                    length = length_steps * beat / 2 * 0.95
+                    wave = chip_wave(f, length, "pulse", duty=0.125, vibrato=0.006)
+                    add_wrapped(tune, lowpass(wave, 3800) * note_env(len(wave), 0.01, length * 0.6, 0.4) * 0.07, start + swung(step))
+                    step += length_steps
+                else:
+                    step += 1
+
+    # Everything ducks a little under the kick, for that pumping lo-fi feel.
+    duck = np.ones(n)
+    for k in kick_times:
+        i = int(k * SR) % n
+        m = int(0.28 * SR)
+        shape = 1 - 0.35 * np.exp(-np.arange(m) / (0.08 * SR))
+        idx = (i + np.arange(m)) % n
+        duck[idx] = np.minimum(duck[idx], shape)
+    music = (keys + tune) * duck + bass * (0.6 + 0.4 * duck) + drums
+
+    # Lo-fi: a gentle bit-crush and sample-rate drop, a dull top end, crackle and hiss.
+    crushed = np.round(music * 48) / 48
+    held = np.repeat(crushed[::2], 2)[:n]
+    music = lowpass(0.5 * music + 0.5 * held, 4200)
+    crackle = (np.random.default_rng(seed + 1).random(n) > 0.99965).astype(float) * np.random.default_rng(seed + 2).uniform(-1, 1, n)
+    music = music + lowpass(crackle, 3000) * 0.18 + lowpass(highpass(noise(total), 1200), 5000)[:n] * 0.006
+
+    stereo = stereo_reverb(music * 0.9)
+    stereo = normalize(stereo, 0.7)
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = os.path.join(tmp, name + ".wav")
+        wavfile.write(wav, SR, (stereo * 32767).astype(np.int16))
+        out = os.path.join(OUT, name + ".m4a")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", wav, "-c:a", "aac", "-b:a", "128k", out], check=True)
+    print(f"  {name}: {total:.0f} s loop")
+
 def make_music():
-    # Title: hopeful and wide.
-    make_track("music-title", 72,
-               [["C3", "G3", "E4"], ["A2", "E3", "C4"], ["F2", "C3", "A3"], ["G2", "D3", "B3"]], 4,
-               ["C4", "D4", "E4", "G4", "A4"], [0, 1, 2, 3, 2, 1, None, 2], bells=0.25)
-    # Wolfie World: bright, bouncy, major pentatonic.
-    make_track("music-wolfie-world", 84,
-               [["D3", "A3", "F#4"], ["B2", "F#3", "D4"], ["G2", "D3", "B3"], ["A2", "E3", "C#4"]], 4,
-               ["D4", "E4", "F#4", "A4", "B4"], [0, 2, 1, 3, 2, None, 1, 2], bells=0.2)
-    # Pup Moon: slow and dreamy, Lydian.
-    make_track("music-pup-moon", 60,
-               [["F2", "C3", "A3", "E4"], ["G2", "D3", "B3", "F#4"], ["F2", "C3", "A3", "E4"], ["E2", "B2", "G3", "D4"]], 4,
-               ["F4", "G4", "A4", "B4", "C5", "E5"], [0, None, 2, None, 3, None, 1, None], bells=0.35, warm=1100, arp_octave=1)
-    # Glimmer: sparkly and a little mysterious, Dorian.
-    make_track("music-glimmer", 92,
-               [["E3", "B3", "G4"], ["D3", "A3", "F#4"], ["C3", "G3", "E4"], ["D3", "A3", "F#4"]], 4,
-               ["E4", "F#4", "G4", "A4", "B4", "C#5"], [0, 1, 2, 3, 2, 3, 1, 2], bells=0.4, warm=2200, arp_octave=1)
+    # Title and space: warm and floaty.
+    make_lofi("music-title", 74, [["F3", "A3", "C4", "E4"], ["E3", "G3", "B3", "D4"], ["D3", "F3", "A3", "C4", "E4"], ["C3", "E3", "G3", "B3"]],
+              seed=11, scale=["C4", "D4", "E4", "G4", "A4"], lead=0.4)
+    # Wolfie World: sunny, a little bouncy.
+    make_lofi("music-wolfie-world", 82, [["C3", "E3", "G3", "B3"], ["A2", "C3", "E3", "G3"], ["D3", "F3", "A3", "C4"], ["G2", "B2", "D3", "F3"]],
+              seed=21, scale=["C4", "D4", "E4", "G4", "A4"], lead=0.5, bright=3000)
+    # Pup Moon: slow and dreamy.
+    make_lofi("music-pup-moon", 68, [["D#3", "G3", "A#3", "D4"], ["C3", "D#3", "G3", "A#3", "D4"], ["G#2", "C3", "D#3", "G3"], ["A#2", "D3", "F3", "G3"]],
+              seed=31, scale=["D#4", "F4", "G4", "A#4", "C5"], lead=0.35, swing=0.64, bright=2000)
+    # Glimmer: a bit mysterious, with a walking bass.
+    make_lofi("music-glimmer", 86, [["D3", "F3", "A3", "C4", "E4"], ["G2", "B2", "D3", "F3"], ["E3", "G3", "B3", "D4"], ["A2", "C#3", "E3", "G3"]],
+              seed=41, scale=["D4", "E4", "F4", "A4", "C5"], lead=0.45, bright=2800)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,16 @@ final class SpaceScene {
     private(set) var planetID = ""
     /// Radius of the planet you're orbiting, in blocks.
     private(set) var planetRadius: Float = 150
+    /// The glowing air around the planet you're orbiting.
+    private var atmosphere = Entity()
+
+    /// Where another planet hangs in the sky, seen from here.
+    static func direction(of id: String) -> SIMD3<Float>? {
+        directions[id]
+    }
+
+    /// Fly inside this and you start coming down through the atmosphere.
+    var atmosphereRadius: Float { planetRadius * 1.22 }
     private var planetModel: Entity?
     private var farPlanets: [String: Entity] = [:]
     private var spaceport: Entity?
@@ -68,6 +78,17 @@ final class SpaceScene {
             root.addChild(holder)
             planetModel = holder
             planetRadius = Float(min(size.x, size.z)) / 2 * SpaceScene.voxelScale * 0.95
+            // A soft glow of air around it, in the colour of its sky.
+            atmosphere.removeFromParent()
+            atmosphere = Entity()
+            let color = BlockRegistry.parseHex(PlanetCatalog.shared.planet(id: id)?.sky ?? "#c4b6ff")
+            let sphere = MeshResource.generateSphere(radius: 1)
+            for (scale, opacity) in [(Float(1.1), Float(0.22)), (1.2, 0.12), (1.3, 0.06)] {
+                let shell = ModelEntity(mesh: sphere, materials: [Shots.material(color, opacity: opacity)])
+                shell.scale = SIMD3(repeating: planetRadius * scale)
+                atmosphere.addChild(shell)
+            }
+            root.addChild(atmosphere)
         }
 
         // Every other planet hangs far off in its own direction.
