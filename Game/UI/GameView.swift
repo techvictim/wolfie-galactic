@@ -726,7 +726,11 @@ struct ItemIcon: View {
     var body: some View {
         switch item {
         case .laser:
-            LaserIcon()
+            if let picture = GamePicture.named("item-laser") {
+                picture.resizable().interpolation(.high).scaledToFit()
+            } else {
+                LaserIcon()
+            }
         case .block(let id):
             ZStack {
                 BlockIcon(rgb: BlockRegistry.shared.rgb(id))
@@ -785,16 +789,18 @@ struct BackpackScreen: View {
     private let amber = Color(red: 1.0, green: 0.71, blue: 0.28)
 
     var body: some View {
-        let items = game.backpackItems
+        let sections = game.backpackSections
+        let items = sections.flatMap(\.items)
         let kb = game.keyboardMode
         ZStack {
-            Color(red: 0.04, green: 0.03, blue: 0.12).opacity(0.9)
+            Color(red: 0.04, green: 0.03, blue: 0.12).opacity(0.92)
                 .ignoresSafeArea()
                 .onTapGesture { game.closeBackpack() }
-            VStack(spacing: 14) {
+            VStack(spacing: 12) {
+                // The title and tabs stay put at the top.
                 HStack {
                     Text("Backpack")
-                        .font(.game(36).weight(.heavy))
+                        .font(.game(34).weight(.heavy))
                     Spacer()
                     if game.freeBuild {
                         Text("Free build: take anything")
@@ -824,13 +830,43 @@ struct BackpackScreen: View {
                     Text(kb ? "E" : (Btn.ps ? "R1" : "RB")).font(.game(13).weight(.heavy)).foregroundStyle(.white.opacity(0.5))
                 }
                 .oneLine()
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(UIMetrics.points(124)), spacing: UIMetrics.points(10)), count: Game.backpackColumns),
-                          spacing: UIMetrics.points(10)) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                        BackpackTile(game: game, item: item, selected: index == min(game.backpackIndex, items.count - 1))
-                            .onTapGesture { game.tapBackpack(index) }
+
+                // Only the tiles scroll, and they follow what you pick.
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: true) {
+                        VStack(alignment: .leading, spacing: UIMetrics.points(14)) {
+                            let starts = sections.indices.map { i in sections[..<i].reduce(0) { $0 + $1.items.count } }
+                            ForEach(Array(sections.enumerated()), id: \.offset) { s, section in
+                                if let title = section.title {
+                                    Text(title)
+                                        .font(.game(18).weight(.heavy))
+                                        .foregroundStyle(amber)
+                                        .padding(.leading, 4)
+                                }
+                                LazyVGrid(columns: Array(repeating: GridItem(.fixed(UIMetrics.points(124)), spacing: UIMetrics.points(10)), count: Game.backpackColumns),
+                                          alignment: .leading, spacing: UIMetrics.points(10)) {
+                                    ForEach(Array(section.items.enumerated()), id: \.offset) { k, item in
+                                        let index = starts[s] + k
+                                        BackpackTile(game: game, item: item, selected: index == min(game.backpackIndex, items.count - 1))
+                                            .id(index)
+                                            .onTapGesture { game.tapBackpack(index) }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 6)
+                    }
+                    .frame(maxHeight: .infinity)
+                    .onChange(of: game.backpackIndex) { _, index in
+                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(index, anchor: .center) }
+                    }
+                    .onChange(of: game.backpackTab) { _, _ in
+                        proxy.scrollTo(0, anchor: .top)
                     }
                 }
+
+                // What it is and how to get it stay put at the bottom.
                 if items.indices.contains(game.backpackIndex) {
                     BackpackDetail(game: game, item: items[game.backpackIndex])
                 }
@@ -841,9 +877,8 @@ struct BackpackScreen: View {
                     .oneLine()
             }
             .padding(24)
-            .frame(maxWidth: UIMetrics.points(860))
+            .frame(maxWidth: UIMetrics.points(860), maxHeight: .infinity)
         }
-        .animation(.spring(duration: 0.2), value: game.backpackIndex)
         .animation(.easeInOut(duration: 0.2), value: game.backpackTab)
     }
 }
@@ -857,17 +892,22 @@ struct BackpackTile: View {
     var body: some View {
         let count = game.count(item)
         let owned = game.freeBuild || count > 0
+        let canMake = game.affordableRecipe(item) != nil
+        let hasRecipe = !ItemCatalog.shared.recipes(for: item).isEmpty
         VStack(spacing: 4) {
             ItemIcon(item: item)
-                .frame(width: UIMetrics.points(58), height: UIMetrics.points(58))
+                .frame(width: UIMetrics.points(item.isTool ? 72 : 58), height: UIMetrics.points(item.isTool ? 72 : 58))
                 .opacity(owned ? 1 : 0.4)
             Text(ItemCatalog.shared.name(item))
                 .font(.game(13).weight(.bold))
                 .foregroundStyle(.white)
                 .oneLine()
-            Text(game.freeBuild ? "∞" : (count > 0 ? "×\(count)" : (game.affordableRecipe(item) != nil ? "can make" : "none")))
-                .font(.game(12).weight(.heavy).monospacedDigit())
-                .foregroundStyle(count > 0 || game.freeBuild ? amber : (game.affordableRecipe(item) != nil ? Color.green : Color.white.opacity(0.45)))
+            // Weapons are always yours, so they don't need a count.
+            if !item.isTool {
+                Text(game.freeBuild ? "∞" : (count > 0 ? "×\(count)" : (canMake ? "can make" : (hasRecipe ? "need parts" : "find it"))))
+                    .font(.game(12).weight(.heavy).monospacedDigit())
+                    .foregroundStyle(count > 0 || game.freeBuild ? amber : (canMake ? Color.green : Color(red: 1, green: 0.6, blue: 0.6)))
+            }
         }
         .padding(8)
         .frame(width: UIMetrics.points(124), height: UIMetrics.points(124))
@@ -877,7 +917,8 @@ struct BackpackTile: View {
     }
 }
 
-/// The chosen item: what it is, what making it takes, and buttons to hold or make it.
+/// The chosen item: what it is, exactly what making it takes (and where to find each part),
+/// and buttons to hold or make it.
 struct BackpackDetail: View {
     let game: Game
     let item: Item
@@ -885,10 +926,18 @@ struct BackpackDetail: View {
     var body: some View {
         let catalog = ItemCatalog.shared
         let recipe = game.affordableRecipe(item) ?? catalog.recipes(for: item).first
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(catalog.name(item))
-                    .font(.game(20).weight(.heavy))
+        let canMake = game.affordableRecipe(item) != nil
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    Text(catalog.name(item))
+                        .font(.game(20).weight(.heavy))
+                    if !item.isTool && !game.freeBuild {
+                        Text("you have \(game.count(item))")
+                            .font(.game(14).weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                }
                 if case .block(let id) = item, let machine = Machine(rawValue: id) {
                     Text(machine.help).font(.game(14)).foregroundStyle(.white.opacity(0.75))
                 }
@@ -898,32 +947,40 @@ struct BackpackDetail: View {
                     Text("Hand tools · Hold to slice through blocks").font(.game(14)).foregroundStyle(.white.opacity(0.75))
                 }
                 if let recipe, !game.freeBuild {
-                    HStack(spacing: 8) {
-                        Text(recipe.count > 1 ? "Make \(recipe.count) from" : "Make from")
-                            .font(.game(14).weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.7))
-                        ForEach(Array(recipe.needs.enumerated()), id: \.offset) { _, need in
-                            let enough = game.count(need.0) >= need.1
-                            HStack(spacing: 3) {
-                                ItemIcon(item: need.0).frame(width: UIMetrics.points(22), height: UIMetrics.points(22))
-                                Text("\(need.1)")
-                                    .font(.game(14).weight(.heavy).monospacedDigit())
-                                    .foregroundStyle(enough ? Color.green : Color(red: 1, green: 0.5, blue: 0.5))
+                    Text(canMake ? (recipe.count > 1 ? "You can make \(recipe.count)! It takes:" : "You can make one! It takes:")
+                                 : "To make \(recipe.count > 1 ? "\(recipe.count)" : "one"), collect:")
+                        .font(.game(14).weight(.semibold))
+                        .foregroundStyle(canMake ? Color.green : .white.opacity(0.8))
+                    ForEach(Array(recipe.needs.enumerated()), id: \.offset) { _, need in
+                        let have = game.count(need.0)
+                        let enough = have >= need.1
+                        HStack(spacing: 8) {
+                            ItemIcon(item: need.0).frame(width: UIMetrics.points(22), height: UIMetrics.points(22))
+                            Text("\(catalog.name(need.0))")
+                                .font(.game(14).weight(.bold))
+                            Text("\(min(have, need.1))/\(need.1)")
+                                .font(.game(14).weight(.heavy).monospacedDigit())
+                                .foregroundStyle(enough ? Color.green : Color(red: 1, green: 0.5, blue: 0.5))
+                            if !enough, let hint = catalog.whereToFind(need.0) {
+                                Text("· \(hint)")
+                                    .font(.game(13))
+                                    .foregroundStyle(.white.opacity(0.6))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
                             }
                         }
                     }
-                } else if !game.freeBuild && !item.isTool {
-                    Text("Find it out in the world").font(.game(14)).foregroundStyle(.white.opacity(0.6))
+                } else if !game.freeBuild && !item.isTool, let hint = catalog.whereToFind(item) {
+                    Text("Where to find it: \(hint)").font(.game(14)).foregroundStyle(.white.opacity(0.75))
                 }
             }
             .foregroundStyle(.white)
-            .oneLine()
             Spacer()
             if !game.freeBuild && recipe != nil {
                 Text("Make")
                     .font(.game(16).weight(.heavy))
                     .padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(Capsule().fill(game.affordableRecipe(item) != nil ? Color.green.opacity(0.85) : Color.white.opacity(0.12)))
+                    .background(Capsule().fill(canMake ? Color.green.opacity(0.85) : Color.white.opacity(0.12)))
                     .foregroundStyle(.white)
                     .onTapGesture { game.make(item) }
             }

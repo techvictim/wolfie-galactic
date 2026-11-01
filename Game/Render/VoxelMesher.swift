@@ -127,10 +127,10 @@ struct TileKey: Hashable, Sendable {
 }
 
 /// Builds the simple far-away terrain. Columns where detailed chunks are shown are left out.
+/// Nearer tiles use smaller columns (2 blocks), farther ones bigger (4), and buildings keep the
+/// colours of their walls so skylines read from far away.
 enum FarMesher {
-    static let cell = 4
-
-    static func tile(_ tile: TileKey, generator: TerrainGenerator, skipping detailed: Set<ChunkKey>) -> MeshBuilder {
+    static func tile(_ tile: TileKey, generator: TerrainGenerator, skipping detailed: Set<ChunkKey>, cell: Int = 4) -> MeshBuilder {
         var builder = MeshBuilder()
         let cells = TileKey.blocks / cell
         let x0 = tile.x * TileKey.blocks
@@ -142,18 +142,22 @@ enum FarMesher {
         let span = cells + 2
         var heights = [Int](repeating: 0, count: span * span)
         var tops = [UInt8](repeating: 0, count: span * span)
+        var buildings: [Int: (ground: Int, bands: [UInt8])] = [:]
         for j in 0..<span {
             for i in 0..<span {
-                let x = x0 + (i - 1) * cell + cell / 2
-                let z = z0 + (j - 1) * cell + cell / 2
-                let h = generator.height(x, z)
-                // Buildings show on the horizon as tall blocks in their colour.
-                if let building = generator.farTop(x, z), building.height > h {
-                    heights[j * span + i] = building.height
-                    tops[j * span + i] = building.block
+                let x = x0 + (i - 1) * cell
+                let z = z0 + (j - 1) * cell
+                let h = generator.height(x + cell / 2, z + cell / 2)
+                let index = j * span + i
+                if let building = generator.farColumn(x, z, cell: cell), building.height > h {
+                    heights[index] = building.height
+                    tops[index] = building.top
+                    if i > 0 && j > 0 && i <= cells && j <= cells {
+                        buildings[index] = (building.ground, building.bands)
+                    }
                 } else {
-                    heights[j * span + i] = h
-                    tops[j * span + i] = generator.surfaceBlock(height: h)
+                    heights[index] = h
+                    tops[index] = generator.surfaceBlock(height: h)
                 }
             }
         }
@@ -169,8 +173,9 @@ enum FarMesher {
                 let bx = x0 + i * cell
                 let bz = z0 + j * cell
                 if detailed.contains(World.key(x: bx, z: bz)) { continue }
-                let h = heights[(j + 1) * span + (i + 1)]
-                let id = Int(tops[(j + 1) * span + (i + 1)])
+                let index = (j + 1) * span + (i + 1)
+                let h = heights[index]
+                let id = Int(tops[index])
                 let topY = Float(h) - sink
                 let origin = SIMD3<Float>(Float(i * cell), 0, Float(j * cell))
                 builder.addBox(
@@ -179,16 +184,37 @@ enum FarMesher {
                     size: SIMD3<Float>(size, 1, size),
                     u: PaletteTexture.u(index: id, face: 2, count: paletteCount)
                 )
+                let building = buildings[index]
                 for side in sides {
                     let hn = heights[(j + 1 + side.dj) * span + (i + 1 + side.di)]
                     guard hn < h else { continue }
                     let bottom = Float(hn) - sink
-                    builder.addBox(
-                        side.face,
-                        at: SIMD3<Float>(origin.x, bottom, origin.z),
-                        size: SIMD3<Float>(size, topY - bottom, size),
-                        u: PaletteTexture.u(index: id, face: side.faceIndex, count: paletteCount)
-                    )
+                    if let building {
+                        // Walls in bands of their real colours.
+                        var y = max(hn, building.ground)
+                        if Float(y) - sink > bottom {
+                            let groundID = Int(generator.surfaceBlock(height: hn))
+                            builder.addBox(side.face, at: SIMD3<Float>(origin.x, bottom, origin.z),
+                                           size: SIMD3<Float>(size, Float(y) - sink - bottom, size),
+                                           u: PaletteTexture.u(index: groundID, face: side.faceIndex, count: paletteCount))
+                        }
+                        while y < h {
+                            let band = building.bands[min(max(0, y - building.ground), building.bands.count - 1)]
+                            var end = y + 1
+                            while end < h && building.bands[min(max(0, end - building.ground), building.bands.count - 1)] == band { end += 1 }
+                            builder.addBox(side.face, at: SIMD3<Float>(origin.x, Float(y) - sink, origin.z),
+                                           size: SIMD3<Float>(size, Float(end - y), size),
+                                           u: PaletteTexture.u(index: Int(band), face: side.faceIndex, count: paletteCount))
+                            y = end
+                        }
+                    } else {
+                        builder.addBox(
+                            side.face,
+                            at: SIMD3<Float>(origin.x, bottom, origin.z),
+                            size: SIMD3<Float>(size, topY - bottom, size),
+                            u: PaletteTexture.u(index: id, face: side.faceIndex, count: paletteCount)
+                        )
+                    }
                 }
             }
         }

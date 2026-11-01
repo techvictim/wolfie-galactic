@@ -181,6 +181,41 @@ extension TerrainGenerator {
         return pieces
     }
 
+    /// For far-away land: a building over a patch of ground, with the colour of each layer of its
+    /// walls (windows, white bands, neon stripes), so skylines look like buildings from far away.
+    func farColumn(_ x: Int, _ z: Int, cell: Int) -> (height: Int, top: UInt8, ground: Int, bands: [UInt8])? {
+        guard let site = settlement(near: x, z) else { return nil }
+        let pieces = Settlements.pieces(site, planet: planet).filter {
+            $0.farTop != nil && $0.max.x > x && $0.min.x < x + cell && $0.max.z > z && $0.min.z < z + cell
+        }
+        guard !pieces.isEmpty else { return nil }
+        var height = 0
+        var top: UInt8 = SB.white
+        for p in pieces where (p.farTop ?? 0) > height {
+            height = p.farTop ?? 0
+            top = p.farBlock
+        }
+        let ground = site.ground
+        guard height > ground else { return nil }
+        // Look at a few spots in the patch, outside first, for each layer.
+        let spots = [(x, z), (x + cell - 1, z), (x, z + cell - 1), (x + cell - 1, z + cell - 1), (x + cell / 2, z + cell / 2)]
+        var bands: [UInt8] = []
+        bands.reserveCapacity(height - ground)
+        for y in ground..<height {
+            var found: UInt8 = B.air
+            search: for (sx, sz) in spots {
+                for p in pieces.reversed() where sx >= p.min.x && sx < p.max.x && sz >= p.min.z && sz < p.max.z && y >= p.min.y && y < p.max.y {
+                    if let b = p.paint(sx, y, sz), b != B.air {
+                        found = b
+                        break search
+                    }
+                }
+            }
+            bands.append(found == B.air ? (bands.last ?? top) : found)
+        }
+        return (height, top, ground, bands)
+    }
+
     /// For far-away land: the tallest building over a spot, so cities show on the horizon.
     func farTop(_ x: Int, _ z: Int) -> (height: Int, block: UInt8)? {
         guard let site = settlement(near: x, z) else { return nil }

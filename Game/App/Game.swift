@@ -3,6 +3,9 @@ import Foundation
 import Observation
 import RealityKit
 import simd
+#if os(macOS)
+import AppKit
+#endif
 
 /// Runs the game: owns the current planet's world, the player and the 3D scene,
 /// and steps them every frame.
@@ -28,6 +31,7 @@ final class Game {
     var menuIndex = 0
     /// True after the first press of "Start this planet over", waiting for a second press.
     private(set) var confirmingRestart = false
+    private(set) var confirmingQuit = false
     /// Which button names to show: keyboard keys or controller buttons.
     private(set) var keyboardMode = false
     /// Mac: true while playing with the mouse not captured, to show "Click to look around".
@@ -801,7 +805,7 @@ final class Game {
         case friends, hostGame, join(String), searching, yourName, yourColor
         case music, soundEffects, danger, critterBook, backpackMode
         case map, goTo(Int), goToPlace(String)
-        case crew, cameraView, voices, story
+        case crew, cameraView, voices, story, quitGame
     }
 
     /// Where Back goes from Settings or Controls.
@@ -825,8 +829,8 @@ final class Game {
         case .controls, .critterBook: return [.back]
         case .settings:
             return menuReturn == .paused && session == .solo
-                ? [.danger, .backpackMode, .cameraView, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .voices, .speakNames, .restartPlanet, .back]
-                : [.danger, .backpackMode, .cameraView, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .voices, .speakNames, .back]
+                ? [.danger, .backpackMode, .cameraView, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .voices, .speakNames, .restartPlanet, .quitGame, .back]
+                : [.danger, .backpackMode, .cameraView, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .voices, .speakNames, .quitGame, .back]
         default: return []
         }
     }
@@ -886,6 +890,7 @@ final class Game {
             return ("Camera", settings.viewBehind ? "Behind \(name)" : "\(name)'s eyes")
         case .voices: return ("Voices", settings.voices ? "On" : "Off")
         case .story: return ("The Story", "the Red Glitch")
+        case .quitGame: return confirmingQuit ? ("Press again to save and quit", nil) : ("Quit Wolfie Galactic", "back to the home screen")
         }
     }
 
@@ -911,6 +916,7 @@ final class Game {
         menuIndex = index
         Sound.shared.play("menu-move")
         confirmingRestart = false
+        confirmingQuit = false
     }
 
     /// Tap or click on a row.
@@ -1045,6 +1051,12 @@ final class Game {
             openCrewPicker()
         case .story:
             openStory()
+        case .quitGame:
+            if confirmingQuit {
+                quitGame()
+            } else {
+                confirmingQuit = true
+            }
         case .cameraView, .voices:
             adjust(item, by: 1)
         }
@@ -1052,6 +1064,7 @@ final class Game {
 
     private func goBack() {
         confirmingRestart = false
+        confirmingQuit = false
         switch screen {
         case .settings, .controls, .critterBook:
             let from: MenuItem = screen == .settings ? .settings : (screen == .controls ? .controls : .critterBook)
@@ -1092,6 +1105,22 @@ final class Game {
         case .backpack: closeBackpack()
         default: goBack()
         }
+    }
+
+    /// Save everything and close the game, back to the home screen.
+    private func quitGame() {
+        leaveSpaceQuietly()
+        save()
+        endSession()
+        Sound.shared.stopLoop()
+        #if os(macOS)
+        NSApplication.shared.terminate(nil)
+        #else
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            exit(0)
+        }
+        #endif
     }
 
     /// Throws away this planet's saved world and makes a fresh one.

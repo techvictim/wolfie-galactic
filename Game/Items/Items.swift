@@ -228,6 +228,15 @@ final class ItemCatalog {
         }
     }
 
+    /// Where to find something, for the backpack: from blocks.json, or what it's made from.
+    func whereToFind(_ item: Item) -> String? {
+        if case .block(let id) = item, let hint = BlockRegistry.shared.findHint(id) { return hint }
+        if let recipe = recipes(for: item).first {
+            return "Make it in your backpack from " + recipe.needs.map { name($0.0) }.joined(separator: " and ")
+        }
+        return nil
+    }
+
     /// Everything that belongs on a backpack tab, whether you have it yet or not.
     func catalog(_ group: ItemGroup) -> [Item] {
         switch group {

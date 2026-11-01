@@ -28,7 +28,7 @@ enum SkyDecor {
                 root.addChild(wrapper)
             } else {
                 let sphere = ModelEntity(mesh: .generateSphere(radius: size),
-                                         materials: [UnlitMaterial(color: Game.color(BlockRegistry.parseHex(body.color)))])
+                                         materials: [Shots.material(BlockRegistry.parseHex(body.color))])
                 sphere.position = direction * radius * 0.82
                 root.addChild(sphere)
             }

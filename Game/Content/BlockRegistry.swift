@@ -33,6 +33,8 @@ struct BlockDef: Codable {
     let id: UInt8
     let name: String
     let color: String
+    /// Where to find it, for the backpack.
+    var find: String?
 }
 
 struct ContentPack: Codable {
@@ -66,6 +68,10 @@ final class BlockRegistry {
     /// Every block id defined in blocks.json, in order.
     var allIDs: [UInt8] {
         defs.keys.sorted()
+    }
+
+    func findHint(_ id: UInt8) -> String? {
+        defs[id]?.find
     }
 
     func name(_ id: UInt8) -> String {

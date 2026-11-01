@@ -11,7 +11,7 @@ final class WorldRenderer {
     private let material: UnlitMaterial?
 
     private var detail: [ChunkKey: ModelEntity] = [:]
-    private var far: [TileKey: (entity: ModelEntity, skipped: Set<ChunkKey>)] = [:]
+    private var far: [TileKey: (entity: ModelEntity, skipped: Set<ChunkKey>, cell: Int)] = [:]
     private var pendingDetail = Set<ChunkKey>()
     private var pendingFar = Set<TileKey>()
     private var detailQueue: [ChunkKey] = []
@@ -148,9 +148,9 @@ final class WorldRenderer {
         var queue: [(TileKey, Int)] = []
         for tile in wantedTiles where !pendingFar.contains(tile) {
             let skipped = shown[tile] ?? []
-            if let existing = far[tile], existing.skipped == skipped { continue }
             let dx = tile.x - centerTile.x
             let dz = tile.z - centerTile.z
+            if let existing = far[tile], existing.skipped == skipped, existing.cell == WorldRenderer.cell(dx, dz) { continue }
             queue.append((tile, dx * dx + dz * dz))
         }
         farQueue = queue.sorted { $0.1 < $1.1 }.map { $0.0 }
@@ -230,7 +230,14 @@ final class WorldRenderer {
         detailChanged = true
     }
 
+    /// Smaller columns for the far tiles right around you.
+    private static func cell(_ dx: Int, _ dz: Int) -> Int {
+        max(abs(dx), abs(dz)) <= 1 ? 2 : 4
+    }
+
     private func startFar(_ tile: TileKey) {
+        let centerTile = focusChunk.map(TileKey.containing) ?? TileKey(x: 0, z: 0)
+        let cell = WorldRenderer.cell(tile.x - centerTile.x, tile.z - centerTile.z)
         var skipped = Set<ChunkKey>()
         for key in detail.keys where TileKey.containing(key) == tile { skipped.insert(key) }
         pendingFar.insert(tile)
@@ -239,12 +246,12 @@ final class WorldRenderer {
         let skip = skipped
         running += 1
         Task.detached(priority: .utility) { [weak self] in
-            let mesh = FarMesher.tile(tile, generator: generator, skipping: skip)
-            await self?.finishFar(tile, mesh: mesh, skipped: skip, token: token)
+            let mesh = FarMesher.tile(tile, generator: generator, skipping: skip, cell: cell)
+            await self?.finishFar(tile, mesh: mesh, skipped: skip, cell: cell, token: token)
         }
     }
 
-    private func finishFar(_ tile: TileKey, mesh builder: MeshBuilder, skipped: Set<ChunkKey>, token: Int) {
+    private func finishFar(_ tile: TileKey, mesh builder: MeshBuilder, skipped: Set<ChunkKey>, cell: Int, token: Int) {
         guard token == generation else { return }
         running -= 1
         pendingFar.remove(tile)
@@ -262,7 +269,7 @@ final class WorldRenderer {
             entity.model = nil
             entity.isEnabled = false
         }
-        far[tile] = (entity, skipped)
+        far[tile] = (entity, skipped, cell)
         // The detailed area may have moved on while this was being built.
         detailChanged = true
     }

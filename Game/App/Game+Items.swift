@@ -111,12 +111,40 @@ extension Game {
         #endif
     }
 
-    /// What shows on the current tab: everything, in Free build; otherwise what you have or can make.
+    /// What shows on the current tab, in order.
     var backpackItems: [Item] {
-        let catalog = ItemCatalog.shared
-        return catalog.catalog(backpackTab).filter { item in
-            freeBuild || count(item) > 0 || !catalog.recipes(for: item).isEmpty
+        backpackSections.flatMap(\.items)
+    }
+
+    /// The current tab in groups: weapons by kind (Guns, Launchers…); other tabs in one group.
+    /// Everything shows, even what you can't make yet, so you can see what to collect.
+    var backpackSections: [(title: String?, items: [Item])] {
+        let items = ItemCatalog.shared.catalog(backpackTab)
+        guard backpackTab == .weapons else { return [(nil, items)] }
+        var order: [String] = []
+        var groups: [String: [Item]] = [:]
+        for item in items {
+            let group = item.weapon?.group ?? "Hand tools"
+            if groups[group] == nil { order.append(group) }
+            groups[group, default: []].append(item)
         }
+        return order.map { ($0, groups[$0] ?? []) }
+    }
+
+    /// Tiles in rows as they're shown, as indices into backpackItems (for moving up and down).
+    var backpackRows: [[Int]] {
+        var rows: [[Int]] = []
+        var start = 0
+        for section in backpackSections {
+            var k = 0
+            while k < section.items.count {
+                let n = min(Game.backpackColumns, section.items.count - k)
+                rows.append(Array((start + k)..<(start + k + n)))
+                k += n
+            }
+            start += section.items.count
+        }
+        return rows
     }
 
     static let backpackColumns = 6
@@ -137,7 +165,14 @@ extension Game {
         guard !items.isEmpty else { return }
         var index = min(backpackIndex, items.count - 1)
         if frame.menuStep != 0 { index = max(0, min(items.count - 1, index + frame.menuStep)) }
-        if frame.menuMove != 0 { index = max(0, min(items.count - 1, index + frame.menuMove * Game.backpackColumns)) }
+        if frame.menuMove != 0 {
+            let rows = backpackRows
+            if let r = rows.firstIndex(where: { $0.contains(index) }) {
+                let column = rows[r].firstIndex(of: index) ?? 0
+                let target = max(0, min(rows.count - 1, r + frame.menuMove))
+                index = rows[target][min(column, rows[target].count - 1)]
+            }
+        }
         if index != backpackIndex {
             backpackIndex = index
             Sound.shared.play("menu-move")
