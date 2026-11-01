@@ -92,14 +92,14 @@ def eyes(y0, y1, white, pupil, z=-4, out=1, inner=True):
 def wolfie():
     head = (
         [box((-1, 23, -7), (1, 24, -6), "nose"),
-         box((-1, 21, -6), (1, 22, -5), "mouth"),
+         box((-2, 21, -6), (-1, 22, -5), "tongue"), box((-1, 21, -6), (1, 22, -5), "mouth"),
          box((-2, 21, -6), (2, 24, -4), "muzzle")]
         + eyes(25, 27, "white", "amber")
         + both(1, 3, 27, 28, -5, -4, "furdark")
-        + both(2, 3, 29, 31, -1, 0, "earpink")
+        + both(2, 3, 29, 30, -1, 0, "earpink")
         + both(1, 4, 29, 30, -1, 1, "furdark")
         + both(2, 4, 30, 31, -1, 1, "furdark")
-        + both(3, 4, 31, 33, -1, 1, "furdark")
+        + both(3, 4, 31, 32, -1, 1, "furdark")
         + [box((-4, 28, -4), (4, 29, 4), "furdark"),
            box((-4, 21, -4), (4, 29, 4), "fur")]
     )
@@ -296,7 +296,7 @@ COLORS = {
     "jet": "#5b636e", "hazard": "#ffc21a", "nozzle": "#2c3038", "glint": "#e6fbff",
     # Wolfie
     "fur": "#9298a1", "furdark": "#6c727c", "muzzle": "#d7dbe0", "nose": "#22232a", "amber": "#ffb33c",
-    "earpink": "#e8a3a8", "olive": "#6b7a3a", "carrier": "#87734d", "pouch": "#6e5d3d", "tags": "#dfe4ea",
+    "earpink": "#e8a3a8", "tongue": "#ff8a9a", "olive": "#6b7a3a", "carrier": "#87734d", "pouch": "#6e5d3d", "tags": "#dfe4ea",
     "belt": "#3b3a31", "buckle": "#c9ccd2", "paw": "#5f646d", "camo": "#857b5c", "camo1": "#5c6640",
     "camo2": "#ab9d76", "tan": "#c39b62",
     # Gecko Kid
