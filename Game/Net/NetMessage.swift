@@ -7,7 +7,7 @@ enum Net {
     /// Bonjour name the host advertises. Also listed in Info.plist (NSBonjourServices).
     static let serviceType = "_wolfiegalactic._tcp"
     /// Bump when messages change, so old and new versions don't try to play together.
-    static let version = 2
+    static let version = 3
     /// How often each player sends where they are.
     static let poseInterval: Float = 1.0 / 15
     /// The host's player id. Friends get 1, 2, 3…
@@ -45,9 +45,11 @@ struct Pose: Codable, Sendable, Equatable {
     }
 }
 
-/// Where a vehicle is, and who's driving it. Each vehicle exists once per planet.
+/// Where a vehicle is, and who's driving it. Each vehicle exists once, on one planet.
 struct VehicleNote: Codable, Sendable, Equatable {
     let planet: String
+    /// Which vehicle ("rover", or "rover-3fa2" for one somebody placed).
+    let id: String
     let kind: String
     var x: Float
     var y: Float

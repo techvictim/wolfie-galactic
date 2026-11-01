@@ -16,9 +16,9 @@ final class Game {
     /// Set only by the game itself (here and in Game+Together.swift).
     var planet: Planet
     /// The vehicle close enough to get into.
-    var nearVehicle: VehicleKind?
+    var nearVehicle: String?
     /// The vehicle you're in, if any (see Game+Vehicles.swift).
-    var driving: VehicleKind?
+    var driving: String?
     var screen: Screen = .title
     var menuIndex = 0
     /// True after the first press of "Start this planet over", waiting for a second press.
@@ -86,8 +86,12 @@ final class Game {
     @ObservationIgnored private let beam = Entity()
     @ObservationIgnored private let impact: ModelEntity
     /// One model per kind of vehicle on this planet, made when first needed.
-    @ObservationIgnored var vehicleModels: [VehicleKind: Entity] = [:]
-    @ObservationIgnored var vehicles: [VehicleKind: Vehicle] = [:]
+    @ObservationIgnored var vehicleModels: [String: Entity] = [:]
+    /// Vehicles on this planet, by id.
+    @ObservationIgnored var vehicles: [String: Vehicle] = [:]
+    /// The kind of vehicle you're in, or next to.
+    var drivingKind: VehicleKind? { driving.flatMap { vehicles[$0]?.kind } }
+    var nearVehicleKind: VehicleKind? { nearVehicle.flatMap { vehicles[$0]?.kind } }
     /// The chase camera's swing around the vehicle, and its tilt.
     @ObservationIgnored var chaseYaw: Float = 0
     @ObservationIgnored var chasePitch: Float = -0.2

@@ -44,7 +44,7 @@ extension Game {
             x: p.x, y: p.y, z: p.z,
             yaw: ship?.yaw ?? player.yaw, pitch: player.pitch, flying: player.flying,
             laser: laserEnd.map { [$0.x, $0.y, $0.z] },
-            vehicle: (ship?.kind ?? driving)?.rawValue,
+            vehicle: (ship?.kind ?? drivingKind)?.rawValue,
             space: place == .space ? true : nil,
             planet: hereID
         )
@@ -136,14 +136,14 @@ extension Game {
     /// Tell everyone a vehicle moved, was taken, parked, or flew off.
     func shareVehicle(_ v: Vehicle, on planetID: String, driver: Int?, gone: Bool = false) {
         guard session != .solo else { return }
-        let note = VehicleNote(planet: planetID, kind: v.kind.rawValue, x: v.position.x, y: v.position.y, z: v.position.z,
+        let note = VehicleNote(planet: planetID, id: v.id, kind: v.kind.rawValue, x: v.position.x, y: v.position.y, z: v.position.z,
                                yaw: v.yaw, driver: driver, gone: gone)
         remember(note)
         send(.vehicle(note))
     }
 
     private func remember(_ note: VehicleNote) {
-        vehicleNotes[note.planet, default: [:]][note.kind] = note
+        vehicleNotes[note.planet, default: [:]][note.id] = note
     }
 
     /// Put this planet's vehicles where everyone else has left them.
@@ -154,16 +154,16 @@ extension Game {
 
     private func apply(_ note: VehicleNote) {
         guard note.planet == planet.id, place == .surface, let kind = VehicleKind(rawValue: note.kind) else { return }
-        if driving == kind && note.driver != myID { return }   // you're in it here; yours wins
+        if driving == note.id && note.driver != myID { return }   // you're in it here; yours wins
         if note.gone || (note.driver != nil && note.driver != myID) {
             // Driven by a friend (they show it) or flown away: not parked here.
-            vehicles[kind] = nil
+            vehicles[note.id] = nil
         } else {
-            var v = vehicles[kind] ?? Vehicle(kind: kind, position: .zero, yaw: 0)
+            var v = vehicles[note.id] ?? Vehicle(kind: kind, position: .zero, yaw: 0, id: note.id)
             v.position = SIMD3<Float>(note.x, note.y, note.z)
             v.yaw = note.yaw
             v.speed = 0
-            vehicles[kind] = v
+            vehicles[note.id] = v
         }
         showVehicles()
     }

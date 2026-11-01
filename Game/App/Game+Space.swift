@@ -27,7 +27,7 @@ extension Game {
     private func enterSpace(from v: Vehicle) {
         spaceTransition = true
         // The ship leaves the planet with you.
-        vehicles[v.kind] = nil
+        vehicles[v.id] = nil
         shareVehicle(v, on: planet.id, driver: myID, gone: true)
         rememberSpots()
         // While you're away, your saved spot is by the landing pad.
@@ -41,7 +41,7 @@ extension Game {
 
         // Come out above the planet, climbing away from it.
         let r = space.planetRadius
-        var ship = Vehicle(kind: v.kind, position: SIMD3<Float>(0, r + 30, r * 0.35), yaw: v.yaw)
+        var ship = Vehicle(kind: v.kind, position: SIMD3<Float>(0, r + 30, r * 0.35), yaw: v.yaw, id: v.id)
         ship.pitch = 0.45
         ship.speed = v.kind.topSpeed
         spaceShip = ship
@@ -145,7 +145,7 @@ extension Game {
         newDocks[dock] = v.kind
         docks = newDocks
         let angle = Float(dock) * 2 * .pi / 3
-        var ship = Vehicle(kind: kind, position: SpaceScene.padPosition(dock) + SIMD3<Float>(0, 2, 0), yaw: atan2(-cos(angle), -sin(angle)))
+        var ship = Vehicle(kind: kind, position: SpaceScene.padPosition(dock) + SIMD3<Float>(0, 2, 0), yaw: atan2(-cos(angle), -sin(angle)), id: Vehicle.newID(kind))
         ship.pitch = 0.1
         v = ship
         space.showDocks(docks)
@@ -196,7 +196,7 @@ extension Game {
             space.setPlanet(target.id)
             space.showDocks(docks)
             let r = space.planetRadius
-            v = Vehicle(kind: v.kind, position: SIMD3<Float>(0, r * 0.4, r * 3.2), yaw: 0)
+            v = Vehicle(kind: v.kind, position: SIMD3<Float>(0, r * 0.4, r * 3.2), yaw: 0, id: v.id)
             v.pitch = -0.1
             v.speed = v.kind.topSpeed
             chaseEye = nil
@@ -225,14 +225,15 @@ extension Game {
             guard let self else { return }
             // In a friend's game, the host sends the planet; it's quick on home Wi-Fi.
             let next = destination.id == self.planet.id ? nil : await self.fetchWorld(for: destination)
-            self.arrive(on: destination, in: v.kind, world: next)
+            self.arrive(on: destination, in: v, world: next)
             try? await Task.sleep(nanoseconds: 500_000_000)
             self.entryGlow = false
             self.spaceTransition = false
         }
     }
 
-    private func arrive(on destination: Planet, in kind: VehicleKind, world next: World? = nil) {
+    private func arrive(on destination: Planet, in arriving: Vehicle, world next: World? = nil) {
+        let kind = arriving.kind
         let newPlanet = destination.id != planet.id
         place = .surface
         spaceShip = nil
@@ -244,16 +245,13 @@ extension Game {
 
         // Come in high over the landing pad, heading toward it.
         let pad = world.padCenter
-        var ship = Vehicle(kind: kind, position: SIMD3<Float>(Float(pad.x), Game.skyFadeStart + 30, Float(pad.y) + 70), yaw: 0)
+        var ship = Vehicle(kind: kind, position: SIMD3<Float>(Float(pad.x), Game.skyFadeStart + 30, Float(pad.y) + 70), yaw: 0, id: arriving.id)
         ship.pitch = -0.25
         ship.speed = kind.topSpeed * 0.6
         ship.onGround = false
-        if kind == .starship, vehicles[.starship] != nil, vehicles[.starship]!.position.y < ship.position.y - 20 {
-            // The planet's own starship was waiting on the pad: yours takes its place.
-            vehicles[.starship] = nil
-        }
-        vehicles[kind] = ship
-        driving = kind
+        // If the planet's own starship was waiting on the pad, yours (with the same id) takes its place.
+        vehicles[ship.id] = ship
+        driving = ship.id
         chaseEye = nil
         player.position = ship.position
         showVehicles()
@@ -266,19 +264,19 @@ extension Game {
     /// Back to the ground without the show, e.g. when going to the title screen from space.
     func leaveSpaceQuietly() {
         guard place == .space else { return }
-        let kind = spaceShip?.kind ?? .starship
+        let arriving = spaceShip ?? Vehicle(kind: .starship, position: .zero, yaw: 0)
         hyperspaceTime = -1
         space.warp.isEnabled = false
         warpGlow = 0
         if let destination = PlanetCatalog.shared.planet(id: space.planetID) {
-            arrive(on: destination, in: kind)
+            arrive(on: destination, in: arriving)
         }
         // Parked on the pad.
-        if var ship = vehicles[kind] {
+        if var ship = vehicles[arriving.id] {
             let pad = world.padCenter
             ship.position = SIMD3<Float>(Float(pad.x) + 0.5, 0, Float(pad.y) + 0.5)
             settle(&ship)
-            vehicles[kind] = ship
+            vehicles[arriving.id] = ship
         }
         driving = nil
         player = Player(position: world.arrivalPoint())

@@ -230,7 +230,7 @@ struct HUDView: View {
                     .padding(.vertical, 10)
                     .background(Capsule().fill(Color.black.opacity(0.55)))
                     .allowsHitTesting(false)
-                } else if let kind = game.nearVehicle, !game.starMapOpen {
+                } else if let kind = game.nearVehicleKind, !game.starMapOpen {
                     HStack(spacing: 10) {
                         ButtonBadge(letter: game.keyboardMode ? "F" : "Y")
                         Text(kind.isShip ? "Fly the \(kind.name)" : "Drive the \(kind.name)")
@@ -262,7 +262,7 @@ struct HelpCard: View {
 
     var body: some View {
         let kb = game.keyboardMode
-        let rows = game.place == .space ? HelpCard.spaceRows(keyboard: kb) : HelpCard.rows(driving: game.driving, flying: game.flying, keyboard: kb)
+        let rows = game.place == .space ? HelpCard.spaceRows(keyboard: kb) : HelpCard.rows(driving: game.drivingKind, flying: game.flying, keyboard: kb)
         VStack(alignment: .leading, spacing: UIMetrics.points(10)) {
             HStack {
                 Text(title)
@@ -295,7 +295,7 @@ struct HelpCard: View {
 
     private var title: String {
         if game.place == .space { return "Flying in space" }
-        switch game.driving {
+        switch game.drivingKind {
         case .some(let kind) where !kind.isShip: return "Driving the \(kind.name)"
         case .some(let kind): return "Flying the \(kind.name)"
         case nil: return "Controls"

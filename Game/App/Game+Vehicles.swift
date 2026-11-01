@@ -20,41 +20,36 @@ extension Game {
         Sound.shared.stopLoop(channel: "engine")
         vehicles.removeAll()
 
-        let pad = world.padCenter
-        var ship = Vehicle(kind: .starship, position: SIMD3<Float>(Float(pad.x) + 0.5, 0, Float(pad.y) + 0.5), yaw: .pi)
-        restoreSpot(&ship)
-        settle(&ship)
-        vehicles[.starship] = ship
-
+        func add(_ kind: VehicleKind, at base: SIMD2<Int>, dx: Int = 0, dz: Int = 0, yaw: Float) {
+            guard vehicles[kind.rawValue] == nil else { return }
+            var v = Vehicle(kind: kind, position: SIMD3<Float>(Float(base.x + dx) + 0.5, 0, Float(base.y + dz) + 0.5), yaw: yaw)
+            settle(&v)
+            vehicles[v.id] = v
+        }
+        add(.starship, at: world.padCenter, yaw: .pi)
         if planet.id == PlanetCatalog.shared.homeID {
             let spawn = world.spawnPoint()
-            var rover = Vehicle(kind: .rover, position: SIMD3<Float>(floor(spawn.x) + 5, 0, floor(spawn.z) - 3), yaw: -.pi / 2)
-            restoreSpot(&rover)
-            settle(&rover)
-            vehicles[.rover] = rover
+            add(.rover, at: SIMD2(Int(floor(spawn.x)), Int(floor(spawn.z))), dx: 5, dz: -3, yaw: -.pi / 2)
         }
         // Vehicles this planet starts with (planets.json "vehicles").
         for spot in planet.vehicles ?? [] {
-            guard let kind = VehicleKind(rawValue: spot.kind), vehicles[kind] == nil else { continue }
+            guard let kind = VehicleKind(rawValue: spot.kind) else { continue }
             let base: SIMD2<Int>
             switch spot.near {
             case "settlement": base = TerrainGenerator.firstSettlement
             case "start": base = TerrainGenerator.spawn
             default: base = world.padCenter
             }
-            var v = Vehicle(kind: kind, position: SIMD3<Float>(Float(base.x + spot.dx) + 0.5, 0, Float(base.y + spot.dz) + 0.5), yaw: spot.yaw ?? 0)
-            restoreSpot(&v)
-            settle(&v)
-            vehicles[kind] = v
+            add(kind, at: base, dx: spot.dx, dz: spot.dz, yaw: spot.yaw ?? 0)
         }
 
-        // Other ships you've flown here and parked.
+        // Where you've parked them, and any you've placed or flown here.
         if session != .joined, let spots = UserDefaults.standard.dictionary(forKey: spotKey) as? [String: [Double]] {
-            for (name, spot) in spots {
-                guard let kind = VehicleKind(rawValue: name), vehicles[kind] == nil, spot.count == 4 else { continue }
-                var v = Vehicle(kind: kind, position: SIMD3<Float>(Float(spot[0]), Float(spot[1]), Float(spot[2])), yaw: Float(spot[3]))
+            for (id, spot) in spots {
+                guard let kind = Vehicle.kind(ofID: id), spot.count == 4 else { continue }
+                var v = Vehicle(kind: kind, position: SIMD3<Float>(Float(spot[0]), Float(spot[1]), Float(spot[2])), yaw: Float(spot[3]), id: id)
                 settle(&v)
-                vehicles[kind] = v
+                vehicles[id] = v
             }
         }
         showVehicles()
@@ -73,20 +68,13 @@ extension Game {
 
     var spotKey: String { "vehicles-\(planet.id)" }
 
-    private func restoreSpot(_ vehicle: inout Vehicle) {
-        guard session != .joined,
-              let spots = UserDefaults.standard.dictionary(forKey: spotKey) as? [String: [Double]],
-              let spot = spots[vehicle.kind.rawValue], spot.count == 4 else { return }
-        vehicle.position = SIMD3<Float>(Float(spot[0]), Float(spot[1]), Float(spot[2]))
-        vehicle.yaw = Float(spot[3])
-    }
-
     /// Remember where you parked, per planet. Not in a friend's world.
     func rememberSpots() {
         guard session != .joined else { return }
+        // A planet's own starship always comes back to its pad, so nobody gets stranded.
         var spots: [String: [Double]] = [:]
-        for (kind, v) in vehicles {
-            spots[kind.rawValue] = [Double(v.position.x), Double(v.position.y), Double(v.position.z), Double(v.yaw)]
+        for (id, v) in vehicles {
+            spots[id] = [Double(v.position.x), Double(v.position.y), Double(v.position.z), Double(v.yaw)]
         }
         UserDefaults.standard.set(spots, forKey: spotKey)
     }
@@ -97,41 +85,42 @@ extension Game {
 
     /// Move the models to where the vehicles are.
     func showVehicles() {
-        for kind in VehicleKind.allCases {
-            if let v = vehicles[kind] {
-                if vehicleModels[kind] == nil, let model = DetailModels.entity(named: kind.modelName) {
-                    root.addChild(model)
-                    vehicleModels[kind] = model
-                }
-                guard let model = vehicleModels[kind] else { continue }
-                // In space, the ship you fly is drawn by the space scene.
-                model.isEnabled = place == .surface
-                model.position = v.position
-                model.orientation = v.orientation
-            } else {
-                vehicleModels[kind]?.isEnabled = false
+        for (id, model) in vehicleModels where vehicles[id] == nil {
+            model.removeFromParent()
+            vehicleModels[id] = nil
+        }
+        for (id, v) in vehicles {
+            if vehicleModels[id] == nil, let model = DetailModels.entity(named: v.kind.modelName) {
+                root.addChild(model)
+                vehicleModels[id] = model
             }
+            guard let model = vehicleModels[id] else { continue }
+            // In space, the ship you fly is drawn by the space scene.
+            model.isEnabled = place == .surface
+            model.position = v.position
+            model.orientation = v.orientation
         }
     }
 
     // MARK: On foot
 
     /// The vehicle you could get into right now, if any.
-    func vehicleInReach() -> VehicleKind? {
-        var best: (VehicleKind, Float)?
-        for (kind, v) in vehicles {
+    func vehicleInReach() -> String? {
+        var best: (String, Float)?
+        for (id, v) in vehicles {
             let d = simd_distance(SIMD2<Float>(player.position.x, player.position.z), SIMD2<Float>(v.position.x, v.position.z))
             let dy = abs(player.position.y - v.position.y)
-            if d < kind.boardingDistance && dy < 4 && (best == nil || d < best!.1) {
-                best = (kind, d)
+            if d < v.kind.boardingDistance && dy < 4 && (best == nil || d < best!.1) {
+                best = (id, d)
             }
         }
         return best?.0
     }
 
-    func board(_ kind: VehicleKind) {
-        guard let v = vehicles[kind] else { return }
-        driving = kind
+    func board(_ id: String) {
+        guard let v = vehicles[id] else { return }
+        let kind = v.kind
+        driving = id
         hideLaser()
         highlight.isEnabled = false
         player.flying = false
@@ -147,7 +136,8 @@ extension Game {
     }
 
     func getOut() {
-        guard let kind = driving, var v = vehicles[kind] else { return }
+        guard let id = driving, var v = vehicles[id] else { return }
+        let kind = v.kind
         driving = nil
         applySky(darkness: 0)
         hideLaser()
@@ -167,15 +157,13 @@ extension Game {
         player.flying = high
         flying = high
 
-        if !kind.isShip {
-            v.speed = 0
-        } else if !v.onGround {
+        if kind.isShip && !v.onGround {
             // An empty starship gently lands where it is.
             settle(&v)
         }
         v.speed = 0
         v.climb = 0
-        vehicles[kind] = v
+        vehicles[id] = v
         showVehicles()
         rememberSpots()
         shareVehicle(v, on: planet.id, driver: nil)
@@ -185,7 +173,8 @@ extension Game {
     // MARK: Driving and flying
 
     func updateDriving(_ frame: InputFrame, dt: Float) {
-        guard let kind = driving, var v = vehicles[kind] else { return }
+        guard let id = driving, var v = vehicles[id] else { return }
+        let kind = v.kind
 
         if frame.openMap {
             getOut()
@@ -220,13 +209,13 @@ extension Game {
             let thrust = min(1, abs(v.speed) / kind.topSpeed + abs(v.climb) / kind.climbRate * 0.5)
             Sound.shared.setLoop(channel: "engine", volume: 0.14 + thrust * 0.3, pitch: 0.7 + thrust * 0.7)
             if frame.action {
-                vehicles[kind] = v
+                vehicles[id] = v
                 rememberSpots()
                 openStarMap()
                 return
             }
         }
-        vehicles[kind] = v
+        vehicles[id] = v
         showVehicles()
 
         // You ride along: critters, friends and the land around you follow the vehicle.

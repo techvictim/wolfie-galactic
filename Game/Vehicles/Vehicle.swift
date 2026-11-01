@@ -127,6 +127,9 @@ enum VehicleKind: String, Codable, Sendable, CaseIterable {
 /// A rover or starship you can get into. Position is the bottom centre of the model.
 struct Vehicle {
     let kind: VehicleKind
+    /// Which one this is. A planet's own vehicles use their kind ("rover"); ones you place or
+    /// swap for get their own ("rover-3fa2").
+    let id: String
     var position: SIMD3<Float>
     var yaw: Float
     var pitch: Float = 0
@@ -140,6 +143,23 @@ struct Vehicle {
     static let roverReverse: Float = 6
     /// The starship can't go higher than this.
     static let shipCeiling: Float = 160
+
+    init(kind: VehicleKind, position: SIMD3<Float>, yaw: Float, id: String? = nil) {
+        self.kind = kind
+        self.id = id ?? kind.rawValue
+        self.position = position
+        self.yaw = yaw
+    }
+
+    /// A new id for another one of a kind.
+    static func newID(_ kind: VehicleKind) -> String {
+        "\(kind.rawValue)-\(String(UInt16.random(in: 0...UInt16.max), radix: 16))"
+    }
+
+    /// The kind of vehicle an id belongs to.
+    static func kind(ofID id: String) -> VehicleKind? {
+        VehicleKind(rawValue: String(id.split(separator: "-").first ?? ""))
+    }
 
     var forward: SIMD3<Float> { SIMD3<Float>(-sin(yaw), 0, -cos(yaw)) }
     var right: SIMD3<Float> { SIMD3<Float>(cos(yaw), 0, -sin(yaw)) }

@@ -94,9 +94,9 @@ extension Game {
         if let site = nearestSettlement, let p = spot(Float(site.center.x), Float(site.center.y)) {
             markers.append(MapMarker(id: "settlement", kind: .settlement, label: settlementName(site), x: p.0, y: p.1, heading: 0))
         }
-        for (kind, v) in vehicles where driving != kind {
+        for (id, v) in vehicles where driving != id {
             if let p = spot(v.position.x, v.position.z) {
-                markers.append(MapMarker(id: "vehicle-\(kind.rawValue)", kind: .vehicle, label: kind.name, x: p.0, y: p.1, heading: 0))
+                markers.append(MapMarker(id: "vehicle-\(id)", kind: .vehicle, label: v.kind.name, x: p.0, y: p.1, heading: 0))
             }
         }
         for friend in friendSpots where friend.planet == planet.id && !friend.inSpace {
