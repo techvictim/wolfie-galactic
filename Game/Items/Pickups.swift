@@ -15,6 +15,8 @@ final class Pickups {
         var velocity: SIMD3<Float>
         var age: Float = 0
         var pulled = false
+        /// Resting on the ground: no need to check the terrain every frame.
+        var settled = false
     }
 
     private var pickups: [Pickup] = []
@@ -60,7 +62,7 @@ final class Pickups {
                     pickups.remove(at: i)
                     continue
                 }
-            } else {
+            } else if !p.settled {
                 // Fall and settle on the ground.
                 p.velocity.y -= 18 * dt
                 p.velocity.x *= max(0, 1 - dt * 3)
@@ -70,6 +72,7 @@ final class Pickups {
                 if next.y < floorY + 0.25 && p.position.y >= floorY - 0.5 {
                     next.y = floorY + 0.25
                     p.velocity = .zero
+                    p.settled = true
                 }
                 p.position = next
             }
