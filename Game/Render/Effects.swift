@@ -162,6 +162,27 @@ final class Effects {
               size: (Float.random(in: 0.25...0.45), 0.05), gravity: 0, drag: 0)
     }
 
+    /// A Glitch Nest cured: a fountain of happy sparkles all over the building.
+    func sparkles(at center: SIMD3<Float>, spread: SIMD3<Float>) {
+        let colors: [SIMD3<Float>] = [SIMD3(1, 0.85, 0.35), SIMD3(0.4, 0.95, 1), SIMD3(1, 0.5, 0.85), SIMD3(1, 1, 1)]
+        let budget = min(70, Effects.maxParticles - particles.count)
+        for i in 0..<max(0, budget) {
+            let offset = SIMD3<Float>(Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1)) * spread
+            let up = SIMD3<Float>(Float.random(in: -1.5...1.5), Float.random(in: 2...6), Float.random(in: -1.5...1.5))
+            spawn(.debris(colors[i % colors.count]), at: center + offset, velocity: up, life: Float.random(in: 1.2...2.2),
+                  size: (Float.random(in: 0.18...0.32), 0.03), gravity: -0.8, drag: 0.8)
+        }
+        spawn(.flash, at: center, velocity: .zero, life: 0.3, size: (1, 5), gravity: 0, drag: 0)
+    }
+
+    /// A red spark drifting up off a Glitch Nest.
+    func glitchSpark(at point: SIMD3<Float>) {
+        guard particles.count < Effects.maxParticles - 60 else { return }
+        let drift = SIMD3<Float>(Float.random(in: -0.4...0.4), Float.random(in: 1...2.2), Float.random(in: -0.4...0.4))
+        spawn(.debris(SIMD3(1, 0.2, 0.26)), at: point, velocity: drift, life: Float.random(in: 0.7...1.3),
+              size: (0.14, 0.02), gravity: -0.4, drag: 0.4)
+    }
+
     /// A smaller burst where a bolt hits but doesn't break anything.
     func spark(at point: SIMD3<Float>) {
         spawn(.flash, at: point, velocity: .zero, life: 0.06, size: (0.3, 0.8), gravity: 0, drag: 0)

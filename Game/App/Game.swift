@@ -125,6 +125,9 @@ final class Game {
     // The crew (see Game+Crew.swift).
     /// The highlighted character in the picker.
     var crewIndex = 0
+    /// The story card showing.
+    var storyIndex = 0
+    @ObservationIgnored var storyReturn: Screen = .title
     /// You, seen from behind.
     @ObservationIgnored var me = CrewRig(GameSettings.shared.crew)
     /// Where aiming starts: your eyes, or (seen from behind) the camera's line of sight level with you.
@@ -135,6 +138,9 @@ final class Game {
     @ObservationIgnored var recentBlasts: [Float] = []
     /// Weapons (see Game+Weapons.swift).
     @ObservationIgnored let armory = Armory()
+    /// The Red Glitch (see Game+Glitch.swift).
+    @ObservationIgnored let glitch = GlitchState()
+    @ObservationIgnored let roboCats = RoboCats()
 
     // Space (see Game+Space.swift).
     var place: Place = .surface
@@ -165,6 +171,8 @@ final class Game {
     @ObservationIgnored var renderer: WorldRenderer!
     @ObservationIgnored private var hazeShells: [ModelEntity] = []
     @ObservationIgnored private var blockMaterial: UnlitMaterial?
+    /// The block colours, shared by every chunk (the Glitch's glow pulses in it).
+    @ObservationIgnored var blockTexture: TextureResource?
     @ObservationIgnored private var lastJumpTap: Float = -10
     @ObservationIgnored var updateSubscription: EventSubscription?
 
@@ -245,6 +253,7 @@ final class Game {
         let colors = (0..<BlockRegistry.maxBlocks).map { BlockRegistry.shared.rgb(UInt8($0)) }
         if let texture = PaletteTexture.make(colors: colors) {
             blockMaterial = PaletteTexture.material(texture)
+            blockTexture = texture
         }
 
         camera.camera.fieldOfViewInDegrees = 70
@@ -261,6 +270,7 @@ final class Game {
         root.addChild(critters.root)
         root.addChild(effects.root)
         root.addChild(armory.root)
+        root.addChild(roboCats.root)
         root.addChild(pickups.root)
         root.addChild(ghost)
         root.addChild(space.root)
@@ -303,6 +313,9 @@ final class Game {
         critters.reset(planet: planet.id)
         effects.clear()
         armory.clear()
+        roboCats.clear()
+        glitch.forgetNearby()
+        stopGlitchHum()
         pickups.clear()
         flying = player.flying
 
@@ -414,8 +427,12 @@ final class Game {
         updateTogether(dt: dt)
         updateMusic()
         effects.update(dt: dt)
+        updateGlitchGlow(dt: dt)
         if screen == .playing && place == .surface && travelText == nil {
             updateArmory(dt: dt)
+            updateGlitch(dt: dt)
+        } else {
+            stopGlitchHum()
         }
         if frame.help && (screen == .playing || screen == .starMap) {
             showHelp.toggle()
@@ -457,6 +474,11 @@ final class Game {
             if menuReturn == .title { orbitCamera(dt: dt) }
             hideLaser()
             updateCrewPicker(frame)
+            return
+        case .story:
+            if storyReturn == .title { orbitCamera(dt: dt) }
+            hideLaser()
+            updateStory(frame)
             return
         case .paused, .settings, .controls, .friends, .critterBook:
             if screen != .paused && menuReturn == .title { orbitCamera(dt: dt) }
@@ -630,9 +652,12 @@ final class Game {
             Sound.shared.startLoop("laser-loop", volume: 0.18)
         }
         let direction = aim.direction
-        let target = critter == nil ? raycast(world: world, origin: aim.origin, direction: direction, maxDistance: Player.laserRange) : nil
+        let cat = critter == nil ? catInLine(aim, range: Player.laserRange) : nil
+        let target = critter == nil && cat == nil ? raycast(world: world, origin: aim.origin, direction: direction, maxDistance: Player.laserRange) : nil
         let end: SIMD3<Float>
-        if let critter {
+        if let cat {
+            end = cat.point
+        } else if let critter {
             end = critter.point
         } else if let target {
             end = SIMD3<Float>(Float(target.block.x) + 0.5, Float(target.block.y) + 0.5, Float(target.block.z) + 0.5)
@@ -651,13 +676,16 @@ final class Game {
             beam.scale = SIMD3<Float>(flicker, flicker, length)
         }
 
-        impact.isEnabled = target != nil || critter != nil
+        impact.isEnabled = target != nil || critter != nil || cat != nil
         impact.position = end
         laserEnd = end
         impact.scale = SIMD3<Float>(repeating: 1.2 + 0.4 * sin(clock * 40))
 
         laserCooldown -= dt
-        if laserCooldown <= 0, let critter {
+        if laserCooldown <= 0, let cat {
+            hitCat(cat.id, from: aim.origin)
+            laserCooldown = 0.35
+        } else if laserCooldown <= 0, let critter {
             zapCritter(critter)
             laserCooldown = 0.3
         } else if laserCooldown <= 0, let target, target.block.y > 0 {
@@ -764,7 +792,7 @@ final class Game {
     // MARK: Title, pause and settings
 
     enum Screen {
-        case title, playing, paused, settings, controls, starMap, friends, critterBook, map, backpack, crew
+        case title, playing, paused, settings, controls, starMap, friends, critterBook, map, backpack, crew, story
     }
 
     enum MenuItem: Hashable {
@@ -773,7 +801,7 @@ final class Game {
         case friends, hostGame, join(String), searching, yourName, yourColor
         case music, soundEffects, danger, critterBook, backpackMode
         case map, goTo(Int), goToPlace(String)
-        case crew, cameraView, voices
+        case crew, cameraView, voices, story
     }
 
     /// Where Back goes from Settings or Controls.
@@ -785,12 +813,13 @@ final class Game {
         case .friends:
             let games: [MenuItem] = foundGames.isEmpty ? [.searching] : foundGames.map { .join($0.name) }
             return [.hostGame] + games + [.yourName, .yourColor, .back]
-        case .paused: return [.resume, .map, .crew, .critterBook, .controls, .settings, .quitToTitle]
+        case .paused: return [.resume, .map, .crew, .critterBook, .story, .controls, .settings, .quitToTitle]
         case .map:
             var items: [MenuItem] = friendSpots.map { .goTo($0.id) }
             if place == .surface {
                 items.append(.goToPlace(Landmark.pad.rawValue))
                 if nearestSettlement != nil { items.append(.goToPlace(Landmark.settlement.rawValue)) }
+                if nearestNest != nil { items.append(.goToPlace(Landmark.nest.rawValue)) }
             }
             return items + [.back]
         case .controls, .critterBook: return [.back]
@@ -844,6 +873,10 @@ final class Game {
                 let pad = world.padCenter
                 return ("Go to the landing pad", directions(to: SIMD2(Float(pad.x), Float(pad.y))))
             }
+            if name == Landmark.nest.rawValue {
+                guard let nest = nearestNest else { return ("Go to a Glitch Nest", nil) }
+                return ("Go to the nearest Glitch Nest", directions(to: nest.groundCenter))
+            }
             guard let site = nearestSettlement else { return ("Go", nil) }
             return ("Go to \(settlementName(site))", directions(to: SIMD2(Float(site.center.x), Float(site.center.y))))
         case .yourColor: return ("Your color", GameSettings.playerColorNames[min(max(settings.playerColor, 0), GameSettings.playerColorNames.count - 1)])
@@ -852,6 +885,7 @@ final class Game {
             let name = Crew.member(settings.crew).name
             return ("Camera", settings.viewBehind ? "Behind \(name)" : "\(name)'s eyes")
         case .voices: return ("Voices", settings.voices ? "On" : "Off")
+        case .story: return ("The Story", "the Red Glitch")
         }
     }
 
@@ -929,6 +963,9 @@ final class Game {
     func activate(_ item: MenuItem) {
         if item != .searching { Sound.shared.play("menu-select", volume: 0.7) }
         switch item {
+        case .play where !UserDefaults.standard.bool(forKey: "seenStory"):
+            UserDefaults.standard.set(true, forKey: "seenStory")
+            openStory()
         case .play, .resume:
             screen = .playing
             syncCamera()
@@ -1006,6 +1043,8 @@ final class Game {
             Sound.shared.applyVolumes()
         case .crew:
             openCrewPicker()
+        case .story:
+            openStory()
         case .cameraView, .voices:
             adjust(item, by: 1)
         }
@@ -1028,6 +1067,8 @@ final class Game {
             activate(.resume)
         case .crew:
             closeCrewPicker()
+        case .story:
+            closeStory()
         default:
             break
         }
@@ -1056,6 +1097,7 @@ final class Game {
     /// Throws away this planet's saved world and makes a fresh one.
     private func restartPlanet() {
         WorldStore.delete(planet: planet.id)
+        glitch.reset(planet: planet.id)
         forgetSpots()
         world = World(planet: planet)
         player = Player(position: world.spawnPoint())

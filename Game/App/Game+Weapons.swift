@@ -71,6 +71,11 @@ extension Game {
 
     private func swingTool(_ def: WeaponDef, aim: LaserAim, critter: AimedCritter?) {
         me.swing()
+        if let cat = catInLine(aim, range: def.range) {
+            hitCat(cat.id, from: aim.origin, direct: def.radius > 1)
+            Sound.shared.playVaried(def.sound, volume: 0.8)
+            return
+        }
         if let critter, critter.distance <= def.range {
             zapCritter(critter)
             Sound.shared.playVaried(def.sound, volume: 0.8)
@@ -114,6 +119,10 @@ extension Game {
         armory.flameTimer -= dt
         guard armory.flameTimer <= 0 else { return }
         armory.flameTimer = def.cooldown
+        if let cat = catInLine(aim, range: def.range) {
+            hitCat(cat.id, from: aim.origin)
+            return
+        }
         if let critter, critter.distance <= def.range, critter.kind.isGrumpy {
             zapCritter(critter)
             return
@@ -152,7 +161,11 @@ extension Game {
             var broken: [(SIMD3<Int>, UInt8)] = []
             var end = aim.origin + direction * def.range
             var hitCritter: AimedCritter?
-            if pellet == 0, let critter, critter.distance < def.range {
+            var hitCatID: Int?
+            if let cat = catInLine(LaserAim(origin: aim.origin, direction: direction, muzzle: aim.muzzle), range: def.range) {
+                hitCatID = cat.id
+                end = cat.point
+            } else if pellet == 0, let critter, critter.distance < def.range {
                 hitCritter = critter
                 end = critter.point
             } else {
@@ -170,7 +183,9 @@ extension Game {
             let count = broken.count
             effects.fireBolt(from: aim.muzzle, to: end, color: tracer, speed: 320) { [weak self] in
                 guard let self else { return }
-                if let hitCritter {
+                if let hitCatID {
+                    self.hitCat(hitCatID, from: aim.origin, direct: def.pierce >= 8)
+                } else if let hitCritter {
                     self.zapCritter(hitCritter)
                 } else if let first {
                     let center = SIMD3<Float>(first.0) + 0.5
@@ -324,6 +339,11 @@ extension Game {
                 }
                 let cell = SIMD3<Int>(Int(floor(s.position.x)), Int(floor(s.position.y)), Int(floor(s.position.z)))
                 if s.position.y < 0 { blow.append(i); stop = true; break }
+                // Straight into a robo-cat.
+                if !s.drilling && roboCats.nearestDistance(to: s.position) < 0.8 {
+                    if s.bounce || s.sticky { s.velocity *= -0.3; s.position = previous; break }
+                    blow.append(i); stop = true; break
+                }
                 if s.drilling {
                     let id = world.block(cell)
                     if id != B.air && cell.y > 0 {
@@ -427,7 +447,7 @@ extension Game {
     }
 
     private func mineTriggered(at p: SIMD3<Float>) -> Bool {
-        if critters.nearestDistance(to: p) < 2 { return true }
+        if critters.nearestDistance(to: p) < 2 || roboCats.nearestDistance(to: p) < 2.2 { return true }
         for v in vehicles.values where simd_distance(v.position, p) < 3.2 { return true }
         return false
     }
@@ -463,6 +483,7 @@ extension Game {
             armory.root.addChild(cloud.root)
             armory.clouds.append(cloud)
         }
+        blastCats(at: p, radius: r * 1.6 + 1)
         guard !fromFriend else { return removed.count }
 
         // A few bits to pick up.
@@ -793,6 +814,7 @@ extension Game {
             if hole.critterTimer <= 0 {
                 hole.critterTimer = 0.5
                 hole.eaten += critters.blast(at: hole.center, radius: 20).count
+                blastCats(at: hole.center, radius: 20)
             }
             // You only feel a gentle tug.
             let toward = hole.center - player.position

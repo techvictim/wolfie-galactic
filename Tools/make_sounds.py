@@ -341,6 +341,65 @@ def make_weapons():
     save_sfx("blackhole-close", mix(lowpass(vwoomp, 2000), delay(chime * 0.7, 0.4)), 0.8)
 
 
+# ---------- the Red Glitch ----------
+
+def robo_meow(seconds, f_start, f_peak, f_end, vowel_from=2600, vowel_to=900, crush=10):
+    """A cat's "mee-ow" sung by a little robot: a buzzy tone sliding up then down, through a
+    filter that sweeps from "ee" to "ow", then stepped and bit-crushed so it sounds electronic."""
+    n = int(seconds * SR)
+    t = np.linspace(0, 1, n)
+    rise = 0.35
+    f = np.where(t < rise, f_start + (f_peak - f_start) * (t / rise),
+                 f_peak + (f_end - f_peak) * np.clip((t - rise) / (1 - rise), 0, 1) ** 0.8)
+    # Robots step their pitch.
+    f = np.round(f / 25) * 25
+    phase = np.cumsum(2 * np.pi * f / SR)
+    tone = signal.sawtooth(phase) * 0.6 + np.sign(np.sin(phase * 2)) * 0.25
+    # Formant: "ee" (bright) to "ow" (dark), done as a moving band.
+    out = np.zeros(n)
+    chunk = 512
+    for i in range(0, n, chunk):
+        k = i / n
+        centre = vowel_from + (vowel_to - vowel_from) * k
+        piece = tone[max(0, i - 256):i + chunk]
+        filtered = bandpass(piece, max(200, centre * 0.45), min(9000, centre * 1.6))
+        out[i:i + chunk] = filtered[-len(out[i:i + chunk]):]
+    out = mix(out, tone * 0.15)
+    # A little bit-crush and a ring-mod buzz.
+    out = np.round(out * crush) / crush
+    out *= 1 + 0.35 * np.sin(2 * np.pi * 62 * t * seconds)
+    return lowpass(out, 7000) * env(n, 0.01, seconds * 0.35)
+
+def make_glitch():
+    # When a robo-cat fires: a quick, cross "mrow!".
+    save_sfx("robocat-meow", robo_meow(0.32, 520, 900, 420), 0.55)
+    # When one gets hit: higher, startled "mip!".
+    save_sfx("robocat-hurt", robo_meow(0.18, 900, 1500, 1100, 3200, 1800), 0.55)
+    # Knocked out: a long, sad "mee-ooow" that winds down, a power-down whine and a soft clank.
+    down = mix(robo_meow(0.7, 700, 1000, 260, 2600, 700),
+               delay(sweep(1400, 90, 0.8, "sine", 0.6) * env(int(0.8 * SR), 0.01, 0.5) * 0.35, 0.35),
+               delay(mix(bell(320, 0.3, 4) * 0.3, lowpass(noise(0.08), 1500) * env(int(0.08 * SR), 0.001, 0.04) * 0.5), 1.0))
+    save_sfx("robocat-down", down, 0.6)
+    # Charging the head laser: a rising whine, so there's time to dodge.
+    save_sfx("robocat-charge", sweep(500, 2200, 0.9, "sine", 1.4) * np.linspace(0.2, 1, int(0.9 * SR)) * env(int(0.9 * SR), 0.05, 0.05, hold=0.8), 0.3)
+    pew = sweep(1600, 300, 0.2, "square", 0.5) * env(int(0.2 * SR), 0.001, 0.12)
+    save_sfx("robocat-laser", lowpass(pew, 4500), 0.5)
+    # Near a Glitch Nest: a low electric hum with a slow pulse and the odd crackle.
+    t = t_of(2.0)
+    hum = (np.sin(2 * np.pi * 60 * t) * 0.5 + np.sin(2 * np.pi * 120 * t) * 0.25 + np.sign(np.sin(2 * np.pi * 30 * t)) * 0.08)
+    hum *= 0.7 + 0.3 * np.sin(2 * np.pi * 1 * t)
+    crackle = bandpass(noise(2.0), 2000, 8000) * (rng.random(int(2.0 * SR)) > 0.9993).astype(float) * 4
+    wavfile.write(os.path.join(OUT, "glitch-hum.wav"), SR, (normalize(loop_crossfade(lowpass(hum, 900) + lowpass(crackle, 9000) * 0.3, 0.25), 0.5) * 32767).astype(np.int16))
+    # A nest cured: a whoosh of good energy and a bright rising sparkle.
+    sparkle = mix(*[delay(bell(f, 0.6, 1.4) * 0.5, 0.07 * k) for k, f in enumerate([784, 988, 1175, 1568, 1976, 2349])])
+    save_sfx("cure", mix(bandpass(noise(0.6), 800, 7000) * np.sin(np.linspace(0, np.pi, int(0.6 * SR))) ** 2 * 0.5, sparkle), 0.7)
+    # Builder bots putting a block back.
+    save_sfx("build-tick", mix(bell(1320, 0.12, 1) * 0.6, bandpass(noise(0.03), 1500, 5000) * env(int(0.03 * SR), 0.001, 0.015) * 0.5), 0.3)
+    # The Glitch spreads: a worried two-note alarm.
+    save_sfx("glitch-alarm", lowpass(mix(sweep(660, 660, 0.25, "square") * env(int(0.25 * SR), 0.01, 0.05, hold=0.18),
+                                         delay(sweep(520, 520, 0.35, "square") * env(int(0.35 * SR), 0.01, 0.1, hold=0.2), 0.3)), 2500), 0.45)
+
+
 # ---------- music ----------
 
 NOTE = {n: i for i, n in enumerate(["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"])}
@@ -458,6 +517,7 @@ if __name__ == "__main__":
     make_effects()
     make_vehicles()
     make_weapons()
+    make_glitch()
     print("Effects done.")
     make_music()
     print(f"Wrote everything to {OUT}")

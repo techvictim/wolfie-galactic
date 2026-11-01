@@ -179,7 +179,7 @@ extension Game {
 
     /// Breaking or blasting a block drops it, to collect.
     func dropPickup(_ id: UInt8, at center: SIMD3<Float>) {
-        guard !freeBuild, id != B.air else { return }
+        guard !freeBuild, id != B.air, !GlitchNest.isGlitch(id) else { return }
         pickups.drop(id, at: center)
     }
 

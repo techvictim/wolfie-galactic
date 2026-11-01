@@ -144,7 +144,7 @@ extension Game {
         hurt(1)
     }
 
-    private func hurt(_ amount: Int) {
+    func hurt(_ amount: Int) {
         guard showHearts, travelText == nil else { return }
         safeTime = 0
         regenTimer = 0
@@ -168,6 +168,7 @@ extension Game {
             guard let self else { return }
             self.player = Player(position: self.world.arrivalPoint())
             self.critters.clearGrumpy(near: self.player.position, radius: 30)
+            self.roboCats.scatter(from: self.player.position)
             self.hearts = Game.maxHearts
             self.safeTime = 0
             self.travelText = nil

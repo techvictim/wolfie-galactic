@@ -12,7 +12,7 @@ extension Game {
 
     /// What's drawn on the map, besides the land.
     struct MapMarker: Identifiable, Equatable {
-        enum Kind: Equatable { case you, friend(color: Int), pad, settlement, vehicle }
+        enum Kind: Equatable { case you, friend(color: Int), pad, settlement, vehicle, nest(heart: Bool), robocat(aiming: Bool) }
         let id: String
         let kind: Kind
         let label: String
@@ -25,7 +25,7 @@ extension Game {
 
     /// The landmarks you can zoom to on this planet.
     enum Landmark: String {
-        case pad, settlement
+        case pad, settlement, nest
     }
 
     func openMap() {
@@ -92,7 +92,21 @@ extension Game {
             markers.append(MapMarker(id: "pad", kind: .pad, label: "Landing pad", x: p.0, y: p.1, heading: 0))
         }
         if let site = nearestSettlement, let p = spot(Float(site.center.x), Float(site.center.y)) {
-            markers.append(MapMarker(id: "settlement", kind: .settlement, label: settlementName(site), x: p.0, y: p.1, heading: 0))
+            let left = nestsLeft(in: site)
+            let label = left == 0 ? "\(settlementName(site)) · Glitch-free" : "\(settlementName(site)) · \(left) Glitch Nest\(left == 1 ? "" : "s")"
+            markers.append(MapMarker(id: "settlement", kind: .settlement, label: label, x: p.0, y: p.1, heading: 0))
+        }
+        // Glitch Nests still to cure, and robo-cats.
+        let c = mapCenter
+        for (_, nest) in nests(around: SIMD2(Float(c.x), Float(c.y)), radius: 300) where !isCured(nest) {
+            if let p = spot(nest.groundCenter.x, nest.groundCenter.y) {
+                markers.append(MapMarker(id: "nest-\(nest.id)", kind: .nest(heart: nest.heart), label: nest.name, x: p.0, y: p.1, heading: 0))
+            }
+        }
+        for (i, cat) in roboCats.spots.enumerated() {
+            if let p = spot(cat.position.x, cat.position.z) {
+                markers.append(MapMarker(id: "cat-\(i)", kind: .robocat(aiming: cat.aiming), label: "", x: p.0, y: p.1, heading: 0))
+            }
         }
         for (id, v) in vehicles where driving != id {
             if let p = spot(v.position.x, v.position.z) {
@@ -188,7 +202,20 @@ extension Game {
             // Arrive at the edge, looking in.
             let spot = SIMD3<Float>(Float(site.center.x) + 0.5, 0, Float(site.center.y + site.radius + 4) + 0.5)
             zoom(to: planet, at: spot, saying: "Zooming to \(settlementName(site))…")
+        case .nest:
+            guard let nest = nearestNest else { return }
+            // Land a little way off, not right on top of it.
+            let spot = SIMD3<Float>(nest.groundCenter.x, 0, Float(nest.max.z) + 10.5)
+            zoom(to: planet, at: spot, saying: "Zooming to a Glitch Nest…")
         }
+    }
+
+    /// The closest uncured nest.
+    var nearestNest: GlitchNest? {
+        let c = mapCenter
+        let here = SIMD2<Float>(Float(c.x), Float(c.y))
+        return nests(around: here, radius: 400).map(\.nest).filter { !isCured($0) }
+            .min { simd_distance($0.groundCenter, here) < simd_distance($1.groundCenter, here) }
     }
 
     private func leaveVehicleAndSpace() {

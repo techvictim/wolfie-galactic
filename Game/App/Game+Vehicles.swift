@@ -201,6 +201,10 @@ extension Game {
             if frame.jumpPressed && v.climb > 0 { Sound.shared.playVaried("jump", volume: 0.5) }
             let revs = abs(v.speed) / kind.topSpeed
             Sound.shared.setLoop(channel: "engine", volume: 0.12 + revs * 0.25, pitch: 0.75 + revs * 0.9)
+            // Bump a robo-cat at speed and it's knocked out.
+            if abs(v.speed) > 4 {
+                for catID in roboCats.ids(near: v.position, within: 2.4) { hitCat(catID, from: v.position, direct: true) }
+            }
         case .starship, .comet, .hauler, .zoomer:
             // Steer with the look stick (or mouse) like looking around; the move stick (or W/S)
             // sets the speed, and sideways on it turns too.
@@ -234,10 +238,13 @@ extension Game {
         guard firing, boltCooldown <= 0 else { return }
         boltCooldown = v.kind.isShip ? 0.13 : 0.2
         let range: Float = 70
-        let critter = place == .surface ? aimCritter(from: aim) : nil
+        let cat = place == .surface ? catInLine(aim, range: range) : nil
+        let critter = place == .surface && cat == nil ? aimCritter(from: aim) : nil
         var end = aim.origin + aim.direction * range
         var block: SIMD3<Int>?
-        if let critter {
+        if let cat {
+            end = cat.point
+        } else if let critter {
             end = critter.point
         } else if place == .surface, let hit = raycast(world: world, origin: aim.origin, direction: aim.direction, maxDistance: range) {
             block = hit.block
@@ -253,7 +260,9 @@ extension Game {
         Sound.shared.playVaried("bolt", volume: 0.5, spread: 0.1)
         effects.fireBolt(from: v.point(muzzle), to: end, color: Game.laserColor) { [weak self] in
             guard let self else { return }
-            if let critter {
+            if let cat {
+                self.hitCat(cat.id, from: aim.origin, direct: true)
+            } else if let critter {
                 self.zapCritter(critter)
             } else if let block, block.y > 0, self.world.block(block) != B.air {
                 self.blastBlock(block)

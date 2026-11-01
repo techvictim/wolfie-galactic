@@ -146,6 +146,11 @@ extension Game {
         send(.blast(planet: planet.id, x: p.x, y: p.y, z: p.z, radius: radius))
     }
 
+    /// Tell everyone a nest was cured or caught the Glitch again.
+    func shareNest(_ id: String, cured: Bool) {
+        send(.nest(planet: planet.id, id: id, cured: cured))
+    }
+
     /// A friend's blast: show it if it's here, and take the blocks away.
     private func friendBlast(planet planetID: String, at p: SIMD3<Float>, radius: Float) {
         if planetID == planet.id {
@@ -330,6 +335,9 @@ extension Game {
         case let .blast(planetID, x, y, z, radius):
             friendBlast(planet: planetID, at: SIMD3(x, y, z), radius: radius)
             host.broadcast(.blast(planet: planetID, x: x, y: y, z: z, radius: radius), except: id)
+        case let .nest(planetID, nestID, cured):
+            if let w = hostWorld(planetID) { friendNest(nestID, cured: cured, planet: planetID, world: w) }
+            host.broadcast(.nest(planet: planetID, id: nestID, cured: cured), except: id)
         case let .askPlanet(planetID):
             let edits = (try? hostWorld(planetID)?.compressedEdits()) ?? [:]
             host.send(.planetData(planet: planetID, edits: edits, vehicles: notes(for: planetID)), to: id)
@@ -442,6 +450,8 @@ extension Game {
             if planetID == planet.id { world.set(SIMD3(x, y, z), block) }
         case let .blast(planetID, x, y, z, radius):
             friendBlast(planet: planetID, at: SIMD3(x, y, z), radius: radius)
+        case let .nest(planetID, nestID, cured):
+            if planetID == planet.id { friendNest(nestID, cured: cured, planet: planetID, world: world) }
         case let .planetData(planetID, edits, notes):
             for note in notes { remember(note) }
             arrivedPlanets[planetID] = edits

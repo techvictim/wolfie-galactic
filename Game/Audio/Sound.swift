@@ -57,7 +57,7 @@ final class Sound {
             engine.connect(speed, to: engine.mainMixerNode, format: format)
             voices.append((player, speed))
         }
-        for channel in ["fx", "engine"] {
+        for channel in ["fx", "engine", "glitch"] {
             let player = AVAudioPlayerNode()
             let speed = AVAudioUnitVarispeed()
             engine.attach(player)
@@ -185,6 +185,7 @@ final class Sound {
         "pickup", "craft", "boing", "zoom", "teleport",
         "hammer", "sledge", "flame-loop", "gun-mini", "gun-heavy", "gun-sniper", "gun-rifle", "shotgun",
         "cannon", "rocket", "throw", "gl", "mortar", "bounce", "stick", "beep", "boom-big", "boom-huge", "nuke",
-        "whistle", "jet", "bomber", "gunship", "drone", "radio", "blackhole-open", "blackhole-loop", "blackhole-close"
+        "whistle", "jet", "bomber", "gunship", "drone", "radio", "blackhole-open", "blackhole-loop", "blackhole-close",
+        "robocat-meow", "robocat-hurt", "robocat-down", "robocat-charge", "robocat-laser", "glitch-hum", "cure", "build-tick", "glitch-alarm"
     ]
 }

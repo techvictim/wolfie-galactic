@@ -77,6 +77,8 @@ enum NetMessage: Codable, Sendable {
     case block(planet: String, x: Int, y: Int, z: Int, id: UInt8)
     /// A ball of blocks blown away (explosions, black holes). Everyone carves the same blocks.
     case blast(planet: String, x: Float, y: Float, z: Float, radius: Float)
+    /// A Glitch Nest was cured (true) or caught the Glitch again (false).
+    case nest(planet: String, id: String, cured: Bool)
     /// Friend → host: I'm going to this planet; please send it.
     case askPlanet(planet: String)
     /// Host → friend: a planet's changed chunks and vehicles.

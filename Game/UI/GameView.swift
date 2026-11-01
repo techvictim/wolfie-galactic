@@ -69,6 +69,11 @@ struct GameView: View {
                     .transition(.opacity)
             }
 
+            if game.screen == .story {
+                StoryView(game: game)
+                    .transition(.opacity)
+            }
+
             if game.screen == .map {
                 MapScreen(game: game)
                     .transition(.opacity)
@@ -499,6 +504,16 @@ struct MapMarkerView: View {
             }
         case .vehicle:
             icon("car.circle.fill", Color(red: 1, green: 0.55, blue: 0.85))
+        case .nest(let heart):
+            Image(systemName: heart ? "heart.circle.fill" : "exclamationmark.triangle.fill")
+                .font(.gameIcon(heart ? 22 : 16, weight: .bold))
+                .foregroundStyle(.white, Color(red: 1, green: 0.17, blue: 0.23))
+                .shadow(color: Color(red: 1, green: 0.1, blue: 0.2).opacity(0.8), radius: 4)
+        case .robocat(let aiming):
+            Circle()
+                .fill(Color(red: 0.15, green: 0.15, blue: 0.2))
+                .overlay(Circle().stroke(aiming ? Color.yellow : Color(red: 1, green: 0.2, blue: 0.25), lineWidth: 2))
+                .frame(width: 9, height: 9)
         }
     }
 
@@ -1159,6 +1174,12 @@ struct TitleView: View {
         VStack(spacing: 22) {
             GameTitle()
                 .frame(width: width)
+            Text("Stop the Red Glitch!")
+                .font(.game(18).weight(.heavy))
+                .foregroundStyle(Color(red: 1, green: 0.3, blue: 0.35))
+                .textCase(.uppercase)
+                .tracking(2)
+                .oneLine()
             VStack(spacing: 12) {
                 ForEach(Array(game.menuItems.enumerated()), id: \.offset) { index, item in
                     MenuRow(game: game, item: item, selected: index == game.menuIndex, big: true)

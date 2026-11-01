@@ -29,8 +29,56 @@ struct Settlement: Sendable {
     }
 }
 
+/// A building the Red Glitch has taken over. It glows red and makes robo-cats until it's wrecked
+/// (cured); then the builder bots put it back clean.
+struct GlitchNest: Sendable {
+    /// "<settlement x>,<settlement z>,<number>", the same on every device.
+    let id: String
+    let name: String
+    let min: SIMD3<Int>
+    /// Exclusive.
+    let max: SIMD3<Int>
+    /// Wolfie Tower: the Glitch's heart.
+    let heart: Bool
+    /// The building as it should be, clean.
+    let pieces: [Settlement.Piece]
+
+    var center: SIMD3<Float> {
+        SIMD3<Float>(Float(min.x + max.x) / 2, Float(min.y + max.y) / 2, Float(min.z + max.z) / 2)
+    }
+
+    var groundCenter: SIMD2<Float> {
+        SIMD2<Float>(Float(min.x + max.x) / 2, Float(min.z + max.z) / 2)
+    }
+
+    /// The clean block for a cell, or nil if the building doesn't touch it.
+    func clean(_ x: Int, _ y: Int, _ z: Int) -> UInt8? {
+        var block: UInt8?
+        for piece in pieces where x >= piece.min.x && x < piece.max.x && y >= piece.min.y && y < piece.max.y && z >= piece.min.z && z < piece.max.z {
+            if let b = piece.paint(x, y, z) { block = b }
+        }
+        return block
+    }
+
+    /// Glitched blocks: the building's frame goes dark red, its windows and lights glow.
+    static func glitched(_ block: UInt8) -> UInt8 {
+        switch block {
+        case B.air: return B.air
+        case SB.nightGlass, SB.domeGlass, SB.neonCyan, SB.neonPink, B.lamp, 8, B.crystal, 17, 16: return SB.glitchGlow
+        case 1, 2, 4, 6, 13, 14, 18, 19, 20, 21: return block   // ground and plants stay
+        default: return SB.glitchBlock
+        }
+    }
+
+    static func isGlitch(_ block: UInt8) -> Bool {
+        block == SB.glitchBlock || block == SB.glitchGlow
+    }
+}
+
 /// Block ids used by settlements (see Resources/blocks.json).
 enum SB {
+    static let glitchBlock: UInt8 = 35
+    static let glitchGlow: UInt8 = 36
     static let white: UInt8 = 22
     static let nightGlass: UInt8 = 23
     static let neonCyan: UInt8 = 24
@@ -147,14 +195,28 @@ extension TerrainGenerator {
 
 /// The building plans.
 enum Settlements {
+    private struct Plan {
+        let pieces: [Settlement.Piece]
+        let nests: [GlitchNest]
+    }
+
     private final class Cache: @unchecked Sendable {
         let lock = NSLock()
-        var plans: [String: [Settlement.Piece]] = [:]
+        var plans: [String: Plan] = [:]
     }
     private static let cache = Cache()
 
     /// A settlement's pieces, worked out once and remembered (chunks are made on several threads).
     static func pieces(_ site: Settlement, planet: Planet) -> [Settlement.Piece] {
+        plan(site, planet: planet).pieces
+    }
+
+    /// The settlement's Glitch Nests.
+    static func nests(_ site: Settlement, planet: Planet) -> [GlitchNest] {
+        plan(site, planet: planet).nests
+    }
+
+    private static func plan(_ site: Settlement, planet: Planet) -> Plan {
         let key = "\(planet.id):\(site.center.x),\(site.center.y)"
         cache.lock.lock()
         if let plan = cache.plans[key] {
@@ -162,16 +224,47 @@ enum Settlements {
             return plan
         }
         cache.lock.unlock()
-        let plan: [Settlement.Piece]
+        var builder = PlanBuilder(site: site)
         switch site.kind {
-        case .city: plan = city(site, planet: planet)
-        case .base: plan = base(site, planet: planet, mine: false)
-        case .mine: plan = base(site, planet: planet, mine: true)
+        case .city: city(site, planet: planet, into: &builder)
+        case .base: base(site, planet: planet, mine: false, into: &builder)
+        case .mine: base(site, planet: planet, mine: true, into: &builder)
         }
+        let plan = Plan(pieces: builder.pieces, nests: builder.nests)
         cache.lock.lock()
         cache.plans[key] = plan
         cache.lock.unlock()
         return plan
+    }
+
+    /// Collects pieces; buildings marked as nests get glitched copies.
+    private struct PlanBuilder {
+        let site: Settlement
+        var pieces: [Settlement.Piece] = []
+        var nests: [GlitchNest] = []
+
+        mutating func add(_ piece: Settlement.Piece) {
+            pieces.append(piece)
+        }
+
+        mutating func building(_ parts: [Settlement.Piece], name: String, nest: Bool, heart: Bool = false) {
+            guard nest, let first = parts.first else {
+                pieces += parts
+                return
+            }
+            var lo = first.min, hi = first.max
+            for p in parts {
+                lo = simd_min(lo, p.min)
+                hi = simd_max(hi, p.max)
+            }
+            nests.append(GlitchNest(id: "\(site.center.x),\(site.center.y),\(nests.count)", name: name, min: lo, max: hi, heart: heart, pieces: parts))
+            for p in parts {
+                let paint = p.paint
+                pieces.append(Settlement.Piece(min: p.min, max: p.max, farTop: p.farTop, farBlock: SB.glitchGlow) { x, y, z in
+                    paint(x, y, z).map(GlitchNest.glitched)
+                })
+            }
+        }
     }
 
     /// A repeatable random number 0..<1 for a settlement.
@@ -303,17 +396,16 @@ enum Settlements {
 
     // MARK: Wolfie cities
 
-    private static func city(_ site: Settlement, planet: Planet) -> [Settlement.Piece] {
+    private static func city(_ site: Settlement, planet: Planet, into plan: inout PlanBuilder) {
         let g = site.ground
         let r = site.radius
         let x0 = site.center.x - r
         let z0 = site.center.y - r
         let side = r * 2
         let street = 17
-        var pieces: [Settlement.Piece] = []
 
         // Streets on a grid, with dashed yellow lines; pavement everywhere else. Clear the air above.
-        pieces.append(box(SIMD3(x0, g - 1, z0), SIMD3(x0 + side + 1, g + 1, z0 + side + 1)) { x, y, z in
+        plan.add(box(SIMD3(x0, g - 1, z0), SIMD3(x0 + side + 1, g + 1, z0 + side + 1)) { x, y, z in
             if y == g { return B.air }
             let sx = (x - x0) % street, sz = (z - z0) % street
             let onStreetX = sx < 3, onStreetZ = sz < 3
@@ -333,40 +425,43 @@ enum Settlements {
                 let lz = z0 + j * street + 3
                 let lot = street - 3
                 let pick = roll(site, i, j)
+                // About one building in five is a Glitch Nest.
+                let nest = roll(site, i + 17, j + 29) < 0.22
                 if i == middle && j == middle {
                     // The landmark: Wolfie Tower, tallest in town, with ears.
-                    pieces += tower(x0: lx + 1, z0: lz + 1, w: 12, d: 12, ground: g, height: min(54, World.height - g - 12), neon: SB.neonPink, ears: true)
+                    plan.building(tower(x0: lx + 1, z0: lz + 1, w: 12, d: 12, ground: g, height: min(54, World.height - g - 12), neon: SB.neonPink, ears: true),
+                                  name: "Wolfie Tower", nest: true, heart: true)
                 } else if pick < 0.42 {
                     let w = 8 + Int(roll(site, i + 9, j) * 4)
                     let h = 16 + Int(roll(site, i, j + 9) * 26)
                     let neon = roll(site, i + 3, j + 3) < 0.5 ? SB.neonCyan : SB.neonPink
-                    pieces += tower(x0: lx + (lot - w) / 2, z0: lz + (lot - w) / 2, w: w, d: w, ground: g, height: min(h, World.height - g - 8), neon: neon)
+                    plan.building(tower(x0: lx + (lot - w) / 2, z0: lz + (lot - w) / 2, w: w, d: w, ground: g, height: min(h, World.height - g - 8), neon: neon),
+                                  name: "Tower", nest: nest)
                 } else if pick < 0.6 {
-                    pieces.append(roundTower(cx: lx + lot / 2, cz: lz + lot / 2, r: 4 + Int(roll(site, i, j + 4) * 2), ground: g, height: 12 + Int(roll(site, i + 4, j) * 20)))
+                    plan.building([roundTower(cx: lx + lot / 2, cz: lz + lot / 2, r: 4 + Int(roll(site, i, j + 4) * 2), ground: g, height: 12 + Int(roll(site, i + 4, j) * 20))],
+                                  name: "Round Tower", nest: nest)
                 } else if pick < 0.72 {
-                    pieces.append(dome(cx: lx + lot / 2, cz: lz + lot / 2, r: 6, ground: g, floor: planet.terrain.surface))
+                    plan.building([dome(cx: lx + lot / 2, cz: lz + lot / 2, r: 6, ground: g, floor: planet.terrain.surface)], name: "Dome", nest: nest)
                 } else if pick < 0.82 {
-                    pieces.append(ziggurat(x0: lx + 1, z0: lz + 1, size: lot - 2, ground: g))
+                    plan.building([ziggurat(x0: lx + 1, z0: lz + 1, size: lot - 2, ground: g)], name: "Pyramid", nest: nest)
                 } else if pick < 0.9 {
-                    pieces.append(landingPad(x0: lx + 1, z0: lz + 1, size: lot - 2, ground: g))
+                    plan.add(landingPad(x0: lx + 1, z0: lz + 1, size: lot - 2, ground: g))
                 } else {
-                    pieces += park(x0: lx, z0: lz, size: lot, ground: g, planet: planet)
+                    for piece in park(x0: lx, z0: lz, size: lot, ground: g, planet: planet) { plan.add(piece) }
                 }
             }
         }
-        return pieces
     }
 
     // MARK: Moon bases and mining colonies
 
-    private static func base(_ site: Settlement, planet: Planet, mine: Bool) -> [Settlement.Piece] {
+    private static func base(_ site: Settlement, planet: Planet, mine: Bool, into plan: inout PlanBuilder) {
         let g = site.ground
         let c = site.center
-        var pieces: [Settlement.Piece] = []
 
         // Clear the air and lay a metal floor in a ring path.
         let r = site.radius
-        pieces.append(box(SIMD3(c.x - r, g - 1, c.y - r), SIMD3(c.x + r + 1, g + 1, c.y + r + 1)) { x, y, z in
+        plan.add(box(SIMD3(c.x - r, g - 1, c.y - r), SIMD3(c.x + r + 1, g + 1, c.y + r + 1)) { x, y, z in
             let d = simd_distance(SIMD2<Float>(Float(x), Float(z)), SIMD2<Float>(Float(c.x), Float(c.y)))
             guard d <= Float(r) else { return nil }
             if y == g { return B.air }
@@ -381,7 +476,7 @@ enum Settlements {
             let minX = min(c.x, ex) - 1, maxX = max(c.x, ex) + 2
             let minZ = min(c.y, ez) - 1, maxZ = max(c.y, ez) + 2
             let from = SIMD2<Float>(Float(c.x), Float(c.y)), to = SIMD2<Float>(Float(ex), Float(ez))
-            pieces.append(box(SIMD3(minX, g - 1, minZ), SIMD3(maxX, g + 3, maxZ)) { x, y, z in
+            plan.add(box(SIMD3(minX, g - 1, minZ), SIMD3(maxX, g + 3, maxZ)) { x, y, z in
                 let p = SIMD2<Float>(Float(x), Float(z))
                 let line = to - from
                 let t = max(0, min(1, simd_dot(p - from, line) / simd_length_squared(line)))
@@ -394,9 +489,9 @@ enum Settlements {
         }
 
         // The big dome in the middle is a greenhouse; the small ones are labs and homes.
-        pieces.append(dome(cx: c.x, cz: c.y, r: 9, ground: g, floor: mine ? B.metal : 13))
+        plan.add(dome(cx: c.x, cz: c.y, r: 9, ground: g, floor: mine ? B.metal : 13))
         if !mine, planet.terrain.trunk == B.air {
-            pieces.append(box(SIMD3(c.x - 3, g, c.y - 3), SIMD3(c.x + 4, g + 6, c.y + 4)) { x, y, z in
+            plan.add(box(SIMD3(c.x - 3, g, c.y - 3), SIMD3(c.x + 4, g + 6, c.y + 4)) { x, y, z in
                 // A little glowing garden.
                 if (x == c.x - 2 || x == c.x + 2) && (z == c.y - 2 || z == c.y + 2) && y <= g + 1 { return 17 }
                 if x == c.x && z == c.y && y < g + 4 { return 16 }
@@ -407,13 +502,15 @@ enum Settlements {
         for (i, a) in angles.enumerated() {
             let cx = c.x + Int((cos(a) * 15).rounded())
             let cz = c.y + Int((sin(a) * 15).rounded())
-            pieces.append(dome(cx: cx, cz: cz, r: 5, ground: g, floor: SB.white, glass: i == 1 ? SB.nightGlass : SB.domeGlass))
+            plan.building([dome(cx: cx, cz: cz, r: 5, ground: g, floor: SB.white, glass: i == 1 ? SB.nightGlass : SB.domeGlass)],
+                          name: mine ? "Mine Dome" : "Base Dome", nest: roll(site, i + 31, 7) < 0.4)
         }
 
         // Radar tower, or a drilling rig at a mine.
         let tx = c.x - 12, tz = c.y + 12
         let towerHeight = mine ? 22 : 15
-        pieces.append(box(SIMD3(tx - 1, g, tz - 1), SIMD3(tx + 2, g + towerHeight + 3, tz + 2), far: g + towerHeight + 2, farBlock: B.metal) { x, y, z in
+        // The radar tower or drilling rig is always a nest: the Glitch loves antennas.
+        plan.building([box(SIMD3(tx - 1, g, tz - 1), SIMD3(tx + 2, g + towerHeight + 3, tz + 2), far: g + towerHeight + 2, farBlock: B.metal) { x, y, z in
             let k = y - g
             if k >= towerHeight {
                 if mine { return x == tx && z == tz ? (k == towerHeight + 2 ? B.lamp : B.crystal) : nil }
@@ -422,11 +519,11 @@ enum Settlements {
             let corner = x != tx && z != tz
             if corner { return B.metal }
             return k % 4 == 0 ? B.metal : nil
-        })
+        }], name: mine ? "Drilling Rig" : "Radar Tower", nest: true)
 
         // Solar panels in rows.
         let sx = c.x + 8, sz = c.y - 18
-        pieces.append(box(SIMD3(sx, g, sz), SIMD3(sx + 12, g + 3, sz + 6)) { x, y, z in
+        plan.add(box(SIMD3(sx, g, sz), SIMD3(sx + 12, g + 3, sz + 6)) { x, y, z in
             let row = (z - sz) % 3
             if row == 2 { return nil }
             if y == g + 2 { return SB.solar }
@@ -434,18 +531,17 @@ enum Settlements {
         })
 
         // A landing pad, and at a mine, piles of crystals and crates.
-        pieces.append(landingPad(x0: c.x - 20, z0: c.y - 20, size: 9, ground: g))
+        plan.add(landingPad(x0: c.x - 20, z0: c.y - 20, size: 9, ground: g))
         if mine {
             for (px, pz) in [(c.x + 14, c.y + 9), (c.x + 16, c.y + 5), (c.x - 3, c.y - 17)] {
-                pieces.append(box(SIMD3(px - 2, g, pz - 2), SIMD3(px + 3, g + 4, pz + 3)) { x, y, z in
+                plan.add(box(SIMD3(px - 2, g, pz - 2), SIMD3(px + 3, g + 4, pz + 3)) { x, y, z in
                     let d = abs(x - px) + abs(z - pz) + (y - g) * 2
                     return d <= 4 ? (d % 2 == 0 ? B.crystal : 17) : nil
                 })
             }
-            pieces.append(box(SIMD3(c.x + 4, g, c.y + 17), SIMD3(c.x + 10, g + 3, c.y + 19)) { x, y, z in
+            plan.add(box(SIMD3(c.x + 4, g, c.y + 17), SIMD3(c.x + 10, g + 3, c.y + 19)) { x, y, z in
                 (x + y + z) % 3 == 0 && y == g + 2 ? nil : B.crate
             })
         }
-        return pieces
     }
 }

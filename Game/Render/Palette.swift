@@ -27,6 +27,21 @@ enum FaceShade {
 enum PaletteTexture {
     /// A one-pixel-tall strip: for each colour, one texel per face direction.
     static func make(colors: [SIMD3<Float>]) -> TextureResource? {
+        guard let image = image(colors: colors) else { return nil }
+        return try? TextureResource(
+            image: image,
+            withName: nil,
+            options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none)
+        )
+    }
+
+    /// Change the colours in place, so everything using the texture updates (the Glitch's pulse).
+    static func update(_ texture: TextureResource, colors: [SIMD3<Float>]) {
+        guard let image = image(colors: colors) else { return }
+        try? texture.replace(withImage: image, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none))
+    }
+
+    private static func image(colors: [SIMD3<Float>]) -> CGImage? {
         let width = colors.count * FaceShade.slots
         var bytes = [UInt8]()
         bytes.reserveCapacity(width * 4)
@@ -58,11 +73,7 @@ enum PaletteTexture {
                 shouldInterpolate: false,
                 intent: .defaultIntent
               ) else { return nil }
-        return try? TextureResource(
-            image: image,
-            withName: nil,
-            options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none)
-        )
+        return image
     }
 
     /// Texture coordinate (u) for a colour index and face. v is always 0.5.

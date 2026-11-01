@@ -33,7 +33,9 @@
     { "id": 31, "name": "Jump Pad", "color": "#7dff5f" },
     { "id": 32, "name": "Teleporter", "color": "#b18cff" },
     { "id": 33, "name": "Speed Pad", "color": "#ffb547" },
-    { "id": 34, "name": "Crystal Maker", "color": "#3fe0c8" }
+    { "id": 34, "name": "Crystal Maker", "color": "#3fe0c8" },
+    { "id": 35, "name": "Glitch Block", "color": "#6e0f1c" },
+    { "id": 36, "name": "Glitch Glow", "color": "#ff2b3a" }
   ],
   "hotbar": [255,  7,  8,  9,  10,  12]
 }

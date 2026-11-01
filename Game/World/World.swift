@@ -100,6 +100,9 @@ final class World {
         return result
     }
 
+    /// Goes up every time a block changes, so things can tell when to look again.
+    private(set) var revision = 0
+
     // MARK: Blocks
 
     @inline(__always)
@@ -138,6 +141,7 @@ final class World {
         if let old = chunks[key]?[index], World.machineIDs.contains(old) { machines[old]?.remove(p) }
         if World.machineIDs.contains(id) { machines[id, default: []].insert(p) }
         chunks[key]?[index] = id
+        revision &+= 1
         edited.insert(key)
         changed.insert(key)
         if lx == 0 { changed.insert(ChunkKey(x: key.x - 1, z: key.z)) }

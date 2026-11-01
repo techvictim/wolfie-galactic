@@ -236,7 +236,7 @@ final class ItemCatalog {
         case .blocks:
             // Blocks you can find in the world or make, but not machines.
             return BlockRegistry.shared.allIDs
-                .filter { Machine(rawValue: $0) == nil }
+                .filter { Machine(rawValue: $0) == nil && !GlitchNest.isGlitch($0) }
                 .map { Item.block($0) }
         case .builds:
             return builds.map { .build($0.id) }
