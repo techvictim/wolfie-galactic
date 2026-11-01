@@ -148,8 +148,8 @@ struct HUDView: View {
                     .allowsHitTesting(false)
             } else {
                 Crosshair(laser: game.laserSelected || game.heldItem.weapon != nil)
+                    .allowsHitTesting(false)
             }
-                .allowsHitTesting(false)
 
             VStack {
                 HStack(alignment: .top) {
