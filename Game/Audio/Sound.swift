@@ -181,6 +181,7 @@ final class Sound {
         "jump", "land", "fly-on", "fly-off", "launch", "menu-move", "menu-select", "hotbar",
         "critter-chirp", "critter-boop", "critter-squeak", "critter-click", "befriend",
         "grumble", "poof", "zap-critter", "startle", "hurt", "heart", "knocked-out", "friend-joined",
-        "rover-engine", "ship-engine", "horn", "vehicle-in", "vehicle-out", "bump", "bolt", "explode", "hyperspace", "entry"
+        "rover-engine", "ship-engine", "horn", "vehicle-in", "vehicle-out", "bump", "bolt", "explode", "hyperspace", "entry",
+        "pickup", "craft", "boing", "zoom", "teleport"
     ]
 }

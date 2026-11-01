@@ -26,6 +26,8 @@ struct InputFrame {
     var action = false
     /// The controls card: Create/View/Share on a controller, ? on a keyboard. Once per press.
     var help = false
+    /// The backpack: I on a keyboard (X on a controller, while on foot, comes as `action`).
+    var backpack = false
     /// The map: d-pad up on a controller, Tab on a keyboard. Once per press.
     var map = false
     /// A, Return or Space, once per press.
@@ -42,7 +44,7 @@ struct InputFrame {
 
 /// The keys the game uses, on any keyboard.
 enum Key: CaseIterable {
-    case w, a, s, d, q, e, f, y, p, c, m, h, slash, tab
+    case w, a, s, d, q, e, f, y, p, c, m, h, slash, tab, i
     case space, enter, escape
     case up, down, left, right
     case one, two, three, four, five, six
@@ -84,7 +86,7 @@ final class InputController {
     private var macShiftDown = false
     private var keyMonitor: Any?
     private static let macKeyCodes: [Key: UInt16] = [
-        .w: 13, .a: 0, .s: 1, .d: 2, .q: 12, .e: 14, .f: 3, .y: 16, .p: 35, .c: 8, .m: 46, .h: 4, .slash: 44, .tab: 48,
+        .w: 13, .a: 0, .s: 1, .d: 2, .q: 12, .e: 14, .f: 3, .y: 16, .p: 35, .c: 8, .m: 46, .h: 4, .slash: 44, .tab: 48, .i: 34,
         .space: 49, .enter: 36, .escape: 53,
         .up: 126, .down: 125, .left: 123, .right: 124,
         .one: 18, .two: 19, .three: 20, .four: 21, .five: 23, .six: 22
@@ -205,6 +207,7 @@ final class InputController {
         case .h: code = .keyH
         case .slash: code = .slash
         case .tab: code = .tab
+        case .i: code = .keyI
         case .space: code = .spacebar
         case .enter: code = .returnOrEnter
         case .escape: code = .escape
@@ -317,6 +320,10 @@ final class InputController {
         if pressed("key.e", isDown(.e)) { frame.hotbarStep += 1 }
         if pressed("key.fly", isDown(.f) || isDown(.y)) {
             frame.openMap = true
+            usingKeyboard = true
+        }
+        if pressed("key.backpack", isDown(.i)) {
+            frame.backpack = true
             usingKeyboard = true
         }
         if pressed("key.map", isDown(.tab)) {

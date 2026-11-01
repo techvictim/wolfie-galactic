@@ -29,7 +29,11 @@
     { "id": 27, "name": "Road", "color": "#3a3d4d" },
     { "id": 28, "name": "Road Line", "color": "#ffd23f" },
     { "id": 29, "name": "Dome Glass", "color": "#b9f0ff" },
-    { "id": 30, "name": "Solar Panel", "color": "#3156c9" }
+    { "id": 30, "name": "Solar Panel", "color": "#3156c9" },
+    { "id": 31, "name": "Jump Pad", "color": "#7dff5f" },
+    { "id": 32, "name": "Teleporter", "color": "#b18cff" },
+    { "id": 33, "name": "Speed Pad", "color": "#ffb547" },
+    { "id": 34, "name": "Crystal Maker", "color": "#3fe0c8" }
   ],
   "hotbar": [255,  7,  8,  9,  10,  12]
 }

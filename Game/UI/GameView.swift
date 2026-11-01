@@ -69,6 +69,11 @@ struct GameView: View {
                     .transition(.opacity)
             }
 
+            if game.screen == .backpack {
+                BackpackScreen(game: game)
+                    .transition(.opacity)
+            }
+
             if game.entryGlow {
                 EntryGlow()
                     .ignoresSafeArea()
@@ -348,6 +353,7 @@ struct HelpCard: View {
                 ([kb ? "Right-click" : "LT"], "Place a block · pet a critter"),
                 ([kb ? "Q  E" : "LB  RB"], "Pick from the hotbar"),
                 ([kb ? "F" : "Y"], "Get in a vehicle or ship"),
+                ([kb ? "I" : "X"], "Backpack: hold things and make new ones"),
                 ([kb ? "Tab" : "D-pad ↑"], "Map: find friends and zoom to them"),
                 ([kb ? "Esc" : "≡"], "Pause, Critter Book, settings")
             ]
@@ -661,16 +667,19 @@ struct HotbarView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ForEach(Array(game.hotbar.enumerated()), id: \.offset) { slot, blockID in
+            ForEach(Array(game.hotbar.enumerated()), id: \.offset) { slot, item in
                 let selected = slot == game.hotbarIndex
-                Group {
-                    if blockID == B.laser {
-                        LaserIcon()
-                    } else {
-                        BlockIcon(rgb: BlockRegistry.shared.rgb(blockID))
-                    }
-                }
+                ItemIcon(item: item)
                     .frame(width: UIMetrics.points(44), height: UIMetrics.points(44))
+                    .overlay(alignment: .bottomTrailing) {
+                        if item != .laser && !game.freeBuild {
+                            Text("\(game.count(item))")
+                                .font(.game(12).weight(.heavy).monospacedDigit())
+                                .foregroundStyle(game.count(item) > 0 ? .white : Color(red: 1, green: 0.5, blue: 0.5))
+                                .shadow(color: .black, radius: 2)
+                                .offset(x: 6, y: 6)
+                        }
+                    }
                     .padding(9)
                     .background(
                         RoundedRectangle(cornerRadius: 14)
@@ -682,10 +691,225 @@ struct HotbarView: View {
                     )
                     .scaleEffect(selected ? 1.12 : 1)
                     .onTapGesture { game.selectSlot(slot) }
-                    .accessibilityLabel(BlockRegistry.shared.name(blockID))
+                    .accessibilityLabel(ItemCatalog.shared.name(item))
             }
         }
         .animation(.spring(duration: 0.2), value: game.hotbarIndex)
+    }
+}
+
+/// The picture for any item: a block cube, the laser, or a little picture of a build or vehicle.
+struct ItemIcon: View {
+    let item: Item
+
+    var body: some View {
+        switch item {
+        case .laser:
+            LaserIcon()
+        case .block(let id):
+            ZStack {
+                BlockIcon(rgb: BlockRegistry.shared.rgb(id))
+                if let machine = Machine(rawValue: id) {
+                    Image(systemName: ItemIcon.symbol(machine))
+                        .font(.gameIcon(14, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black, radius: 2)
+                }
+            }
+        case .build, .vehicle:
+            if let picture = ItemIcon.picture(item) {
+                picture.resizable().interpolation(.high).scaledToFit()
+            } else {
+                Image(systemName: item.isVehicle ? "car.fill" : "house.fill")
+                    .font(.gameIcon(26, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+        }
+    }
+
+    static func symbol(_ machine: Machine) -> String {
+        switch machine {
+        case .jumpPad: return "arrow.up"
+        case .teleporter: return "sparkles"
+        case .speedPad: return "forward.fill"
+        case .crystalMaker: return "diamond.fill"
+        }
+    }
+
+    @MainActor private static var cache: [String: Image] = [:]
+
+    /// Resources/item-build-house.png, item-vehicle-rover.png, made by Tools/make_item_pictures.py.
+    @MainActor static func picture(_ item: Item) -> Image? {
+        let name = "item-" + item.key.replacingOccurrences(of: ":", with: "-")
+        if let image = cache[name] { return image }
+        guard let url = Bundle.main.url(forResource: name, withExtension: "png") else { return nil }
+        #if os(macOS)
+        guard let picture = NSImage(contentsOf: url) else { return nil }
+        let image = Image(nsImage: picture)
+        #else
+        guard let picture = UIImage(contentsOfFile: url.path) else { return nil }
+        let image = Image(uiImage: picture)
+        #endif
+        cache[name] = image
+        return image
+    }
+}
+
+// MARK: - Backpack
+
+/// Everything you've collected and can make, on four tabs. Pick something to hold it in the
+/// hotbar slot you have selected; make more from what you've collected.
+struct BackpackScreen: View {
+    let game: Game
+    private let amber = Color(red: 1.0, green: 0.71, blue: 0.28)
+
+    var body: some View {
+        let items = game.backpackItems
+        let kb = game.keyboardMode
+        ZStack {
+            Color(red: 0.04, green: 0.03, blue: 0.12).opacity(0.9)
+                .ignoresSafeArea()
+                .onTapGesture { game.closeBackpack() }
+            VStack(spacing: 14) {
+                HStack {
+                    Text("Backpack")
+                        .font(.game(36).weight(.heavy))
+                    Spacer()
+                    if game.freeBuild {
+                        Text("Free build: take anything")
+                            .font(.game(15).weight(.semibold))
+                            .foregroundStyle(amber)
+                    }
+                }
+                .foregroundStyle(.white)
+                HStack(spacing: 10) {
+                    Text(kb ? "Q" : "LB").font(.game(13).weight(.heavy)).foregroundStyle(.white.opacity(0.5))
+                    ForEach(ItemGroup.allCases, id: \.rawValue) { group in
+                        let on = group == game.backpackTab
+                        HStack(spacing: 6) {
+                            Image(systemName: group.symbol)
+                            Text(group.title)
+                        }
+                        .font(.game(16).weight(.bold))
+                        .foregroundStyle(on ? .black : .white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(on ? amber : Color.white.opacity(0.1)))
+                        .onTapGesture {
+                            game.backpackTab = group
+                            game.backpackIndex = 0
+                        }
+                    }
+                    Text(kb ? "E" : "RB").font(.game(13).weight(.heavy)).foregroundStyle(.white.opacity(0.5))
+                }
+                .oneLine()
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(UIMetrics.points(124)), spacing: UIMetrics.points(10)), count: Game.backpackColumns),
+                          spacing: UIMetrics.points(10)) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                        BackpackTile(game: game, item: item, selected: index == min(game.backpackIndex, items.count - 1))
+                            .onTapGesture { game.tapBackpack(index) }
+                    }
+                }
+                if items.indices.contains(game.backpackIndex) {
+                    BackpackDetail(game: game, item: items[game.backpackIndex])
+                }
+                Text(kb ? "Arrows to choose · Return to hold it · M to make one · I or Esc to close"
+                        : "Stick to choose · A to hold it · X to make one · B to close")
+                    .font(.game(13).weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .oneLine()
+            }
+            .padding(24)
+            .frame(maxWidth: UIMetrics.points(860))
+        }
+        .animation(.spring(duration: 0.2), value: game.backpackIndex)
+        .animation(.easeInOut(duration: 0.2), value: game.backpackTab)
+    }
+}
+
+struct BackpackTile: View {
+    let game: Game
+    let item: Item
+    let selected: Bool
+    private let amber = Color(red: 1.0, green: 0.71, blue: 0.28)
+
+    var body: some View {
+        let count = game.count(item)
+        let owned = game.freeBuild || count > 0
+        VStack(spacing: 4) {
+            ItemIcon(item: item)
+                .frame(width: UIMetrics.points(58), height: UIMetrics.points(58))
+                .opacity(owned ? 1 : 0.4)
+            Text(ItemCatalog.shared.name(item))
+                .font(.game(13).weight(.bold))
+                .foregroundStyle(.white)
+                .oneLine()
+            Text(game.freeBuild ? "∞" : (count > 0 ? "×\(count)" : (game.affordableRecipe(item) != nil ? "can make" : "none")))
+                .font(.game(12).weight(.heavy).monospacedDigit())
+                .foregroundStyle(count > 0 || game.freeBuild ? amber : (game.affordableRecipe(item) != nil ? Color.green : Color.white.opacity(0.45)))
+        }
+        .padding(8)
+        .frame(width: UIMetrics.points(124), height: UIMetrics.points(124))
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(selected ? 0.16 : 0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(selected ? amber : Color.white.opacity(0.12), lineWidth: selected ? 3 : 1))
+        .scaleEffect(selected ? 1.05 : 1)
+    }
+}
+
+/// The chosen item: what it is, what making it takes, and buttons to hold or make it.
+struct BackpackDetail: View {
+    let game: Game
+    let item: Item
+
+    var body: some View {
+        let catalog = ItemCatalog.shared
+        let recipe = game.affordableRecipe(item) ?? catalog.recipes(for: item).first
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(catalog.name(item))
+                    .font(.game(20).weight(.heavy))
+                if case .block(let id) = item, let machine = Machine(rawValue: id) {
+                    Text(machine.help).font(.game(14)).foregroundStyle(.white.opacity(0.75))
+                }
+                if let recipe, !game.freeBuild {
+                    HStack(spacing: 8) {
+                        Text(recipe.count > 1 ? "Make \(recipe.count) from" : "Make from")
+                            .font(.game(14).weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.7))
+                        ForEach(Array(recipe.needs.enumerated()), id: \.offset) { _, need in
+                            let enough = game.count(need.0) >= need.1
+                            HStack(spacing: 3) {
+                                ItemIcon(item: need.0).frame(width: UIMetrics.points(22), height: UIMetrics.points(22))
+                                Text("\(need.1)")
+                                    .font(.game(14).weight(.heavy).monospacedDigit())
+                                    .foregroundStyle(enough ? Color.green : Color(red: 1, green: 0.5, blue: 0.5))
+                            }
+                        }
+                    }
+                } else if !game.freeBuild {
+                    Text("Find it out in the world").font(.game(14)).foregroundStyle(.white.opacity(0.6))
+                }
+            }
+            .foregroundStyle(.white)
+            .oneLine()
+            Spacer()
+            if !game.freeBuild && recipe != nil {
+                Text("Make")
+                    .font(.game(16).weight(.heavy))
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                    .background(Capsule().fill(game.affordableRecipe(item) != nil ? Color.green.opacity(0.85) : Color.white.opacity(0.12)))
+                    .foregroundStyle(.white)
+                    .onTapGesture { game.make(item) }
+            }
+            Text("Hold")
+                .font(.game(16).weight(.heavy))
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                .background(Capsule().fill(Color(red: 1.0, green: 0.71, blue: 0.28)))
+                .foregroundStyle(.black)
+                .onTapGesture { game.hold(item) }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.07)))
     }
 }
 

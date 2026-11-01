@@ -245,6 +245,13 @@ def make_vehicles():
     crack = bandpass(noise(n), 2000, 8000) * (rng.random(int(n * SR)) > 0.9985).astype(float) * 6
     save_sfx("entry", mix(roar * 1.3, lowpass(crack, 9000) * 0.5) * env(int(n * SR), 0.15, 0.5, hold=1.1), 0.85)
 
+    # Backpack and machines.
+    save_sfx("pickup", mix(sweep(900, 1500, 0.07, "sine", 0.5) * env(int(0.07 * SR), 0.002, 0.04), delay(bell(1800, 0.15, 0.4) * 0.4, 0.03)), 0.45)
+    save_sfx("craft", mix(*[delay(bell(f, 0.35, 1.0), 0.07 * k) for k, f in enumerate([523, 659, 784, 1047])], lowpass(noise(0.08), 2000) * env(int(0.08 * SR), 0.001, 0.04) * 0.5), 0.6)
+    save_sfx("boing", sweep(180, 720, 0.45, "sine", 0.5) * (1 + 0.35 * np.sin(2 * np.pi * 22 * t_of(0.45))) * env(int(0.45 * SR), 0.004, 0.3), 0.6)
+    save_sfx("zoom", mix(bandpass(noise(0.5), 600, 5000) * np.sin(np.linspace(0, np.pi, int(0.5 * SR))) ** 2, sweep(400, 1600, 0.5, "saw", 0.7) * env(int(0.5 * SR), 0.02, 0.3) * 0.25), 0.6)
+    save_sfx("teleport", mix(sweep(300, 2400, 0.35, "sine", 1.5) * env(int(0.35 * SR), 0.01, 0.2), delay(mix(*[delay(bell(f, 0.3, 1.5) * 0.4, 0.04 * k) for k, f in enumerate([1568, 2093, 2637, 3136])]), 0.2)), 0.6)
+
 
 # ---------- music ----------
 

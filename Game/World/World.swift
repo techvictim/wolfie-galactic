@@ -19,6 +19,9 @@ final class World {
     private(set) var edited = Set<ChunkKey>()
     /// Chunks whose look changed and need a new mesh.
     private var changed = Set<ChunkKey>()
+    /// Where machines are (jump pads, teleporters…), by block id.
+    private(set) var machines: [UInt8: Set<SIMD3<Int>>] = [:]
+    private static let machineIDs: ClosedRange<UInt8> = 31...34
 
     init(planet: Planet) {
         self.planet = planet
@@ -45,8 +48,16 @@ final class World {
                   let raw = try? WorldStore.decompress(data),
                   raw.count == World.chunkVolume else { continue }
             let key = ChunkKey(x: parts[0], z: parts[1])
-            chunks[key] = [UInt8](raw)
+            let blocks = [UInt8](raw)
+            chunks[key] = blocks
             edited.insert(key)
+            // Find machines built in this chunk.
+            for (i, id) in blocks.enumerated() where World.machineIDs.contains(id) {
+                let lx = i % World.chunkSize
+                let lz = (i / World.chunkSize) % World.chunkSize
+                let y = i / (World.chunkSize * World.chunkSize)
+                machines[id, default: []].insert(SIMD3(key.x * World.chunkSize + lx, y, key.z * World.chunkSize + lz))
+            }
         }
     }
 
@@ -123,7 +134,10 @@ final class World {
         if chunks[key] == nil { chunks[key] = generator.generateChunk(key) }
         let lx = floorMod(p.x, World.chunkSize)
         let lz = floorMod(p.z, World.chunkSize)
-        chunks[key]?[TerrainGenerator.index(lx, p.y, lz)] = id
+        let index = TerrainGenerator.index(lx, p.y, lz)
+        if let old = chunks[key]?[index], World.machineIDs.contains(old) { machines[old]?.remove(p) }
+        if World.machineIDs.contains(id) { machines[id, default: []].insert(p) }
+        chunks[key]?[index] = id
         edited.insert(key)
         changed.insert(key)
         if lx == 0 { changed.insert(ChunkKey(x: key.x - 1, z: key.z)) }

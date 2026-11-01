@@ -10,8 +10,13 @@ import simd
 @Observable
 final class Game {
     // What the HUD shows.
-    private(set) var hotbar: [UInt8]
-    private(set) var hotbarIndex = 0
+    /// What's in your hands: six slots of blocks, builds, vehicles or the laser.
+    var hotbar: [Item]
+    var hotbarIndex = 0
+    /// Everything you've collected or made, by item key ("block:7" → 12).
+    var backpack: [String: Int] = Game.loadBackpack()
+    var backpackTab: ItemGroup = .blocks
+    var backpackIndex = 0
     private(set) var message = ""
     /// Set only by the game itself (here and in Game+Together.swift).
     var planet: Planet
@@ -69,7 +74,7 @@ final class Game {
         if !commit.isEmpty && commit != "local" { parts.append(commit) }
         return parts.joined(separator: " · ")
     }()
-    var laserSelected: Bool { hotbar[hotbarIndex] == B.laser }
+    var laserSelected: Bool { hotbar[hotbarIndex] == .laser }
 
     // Simulation.
     @ObservationIgnored var world: World
@@ -98,6 +103,21 @@ final class Game {
     @ObservationIgnored var chaseEye: SIMD3<Float>?
     @ObservationIgnored let effects = Effects()
     @ObservationIgnored var boltCooldown: Float = 0
+    // Items (see Game+Items.swift).
+    @ObservationIgnored let pickups = Pickups()
+    @ObservationIgnored let ghost: ModelEntity = {
+        var m = UnlitMaterial(color: PlatformColor(red: 0.37, green: 0.94, blue: 1, alpha: 1))
+        m.blending = .transparent(opacity: .init(floatLiteral: 0.22))
+        m.faceCulling = .none
+        let box = ModelEntity(mesh: .generateBox(size: 1), materials: [m])
+        box.isEnabled = false
+        return box
+    }()
+    @ObservationIgnored var machineCooldown: Float = 0
+    @ObservationIgnored var crystalTimer: Float = 10
+    @ObservationIgnored var jumpPadClock: Float = -100
+    @ObservationIgnored var pickupTally: [UInt8: Int] = [:]
+    @ObservationIgnored var pickupTimer: Float = 0
     @ObservationIgnored var boltSide: Float = 1
     /// The controls card, opened with the help button.
     var showHelp = false
@@ -170,8 +190,8 @@ final class Game {
         planet = start
         world = loaded.world
         player = loaded.player
-        hotbar = BlockRegistry.shared.hotbar
-        hotbarIndex = min(max(loaded.hotbarIndex, 0), BlockRegistry.shared.hotbar.count - 1)
+        hotbar = Game.loadHotbar()
+        hotbarIndex = min(max(loaded.hotbarIndex, 0), 5)
 
         var skyMaterial = UnlitMaterial(color: .white)
         skyMaterial.faceCulling = .none
@@ -224,6 +244,8 @@ final class Game {
         root.addChild(avatars.root)
         root.addChild(critters.root)
         root.addChild(effects.root)
+        root.addChild(pickups.root)
+        root.addChild(ghost)
         root.addChild(space.root)
         root.addChild(space.far)
         camera.addChild(space.warp)
@@ -263,6 +285,7 @@ final class Game {
         renderer.reset(world: world)
         critters.reset(planet: planet.id)
         effects.clear()
+        pickups.clear()
         flying = player.flying
 
         skyDarkness = -1
@@ -365,6 +388,10 @@ final class Game {
             highlight.isEnabled = false
             updateMenu(frame)
             return
+        case .backpack:
+            hideLaser()
+            updateBackpack(frame)
+            return
         case .map:
             if frame.map {
                 closeMap()
@@ -391,6 +418,10 @@ final class Game {
                 openMap()
                 return
             }
+            if frame.backpack || (frame.action && driving == nil && place == .surface) {
+                openBackpack()
+                return
+            }
         }
 
         // Out in space: only the ship.
@@ -405,6 +436,8 @@ final class Game {
         if driving != nil {
             updateDriving(frame, dt: dt)
             nearVehicle = nil
+            ghost.isEnabled = false
+            updatePickups(dt: dt)
             updatePetPrompt(nil)
             updateCritters(dt: dt, fallSpeed: 0, wasOnGround: true)
             saveTimer += dt
@@ -461,6 +494,7 @@ final class Game {
         let aimed = aimCritter(from: footAim)
         if laserSelected {
             highlight.isEnabled = false
+            ghost.isEnabled = false
             updateLaser(firing: frame.breakHeld, dt: dt, critter: aimed, aim: footAim)
         } else {
             hideLaser()
@@ -473,6 +507,8 @@ final class Game {
         }
         lastPlaceHeld = frame.placeHeld
         updatePetPrompt(aimed)
+        updateMachines(dt: dt)
+        updatePickups(dt: dt)
         updateCritters(dt: dt, fallSpeed: fallSpeed, wasOnGround: wasOnGround)
 
         saveTimer += dt
@@ -497,15 +533,17 @@ final class Game {
         breakCooldown -= dt
         placeCooldown -= dt
 
+        updateGhost(target: target)
+
         if frame.breakHeld, breakCooldown <= 0, let target, target.block.y > 0 {
+            let id = world.block(target.block)
             changeBlock(target.block, B.air)
+            dropPickup(id, at: SIMD3<Float>(target.block) + SIMD3(0.5, 0.5, 0.5))
             breakCooldown = 0.25
             Sound.shared.playVaried("break", volume: 0.8)
         }
         if frame.placeHeld, placeCooldown <= 0, let target {
-            let cell = target.previous
-            if world.inBounds(cell.x, cell.y, cell.z), world.block(cell) == B.air, !player.occupies(cell) {
-                changeBlock(cell, hotbar[hotbarIndex])
+            if placeHeld(target: target, pressedNow: !lastPlaceHeld) {
                 placeCooldown = 0.25
                 Sound.shared.playVaried("place", volume: 0.8)
             }
@@ -662,14 +700,14 @@ final class Game {
     // MARK: Title, pause and settings
 
     enum Screen {
-        case title, playing, paused, settings, controls, starMap, friends, critterBook, map
+        case title, playing, paused, settings, controls, starMap, friends, critterBook, map, backpack
     }
 
     enum MenuItem: Hashable {
         case play, controls, settings, resume, quitToTitle
         case lookSpeed, invertLook, speakNames, viewDistance, restartPlanet, back
         case friends, hostGame, join(String), searching, yourName, yourColor
-        case music, soundEffects, danger, critterBook
+        case music, soundEffects, danger, critterBook, backpackMode
         case map, goTo(Int), goToPlace(String)
     }
 
@@ -693,8 +731,8 @@ final class Game {
         case .controls, .critterBook: return [.back]
         case .settings:
             return menuReturn == .paused && session == .solo
-                ? [.danger, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .speakNames, .restartPlanet, .back]
-                : [.danger, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .speakNames, .back]
+                ? [.danger, .backpackMode, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .speakNames, .restartPlanet, .back]
+                : [.danger, .backpackMode, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .speakNames, .back]
         default: return []
         }
     }
@@ -730,6 +768,7 @@ final class Game {
         case .music: return ("Music", GameSettings.musicLevelNames[min(max(settings.musicLevel, 0), 3)])
         case .soundEffects: return ("Sound effects", settings.soundEffects ? "On" : "Off")
         case .danger: return ("Danger", GameSettings.dangerNames[min(max(settings.danger, 0), 2)])
+        case .backpackMode: return ("Backpack", settings.freeBuild ? "Free build" : "Collect & craft")
         case .critterBook: return ("Critter book", "\(foundCritters.count) of \(CritterCatalog.shared.kinds.count)")
         case .map: return ("Map", session == .solo ? nil : "find friends")
         case .goTo(let id):
@@ -805,6 +844,8 @@ final class Game {
         case .danger:
             settings.danger = min(max(settings.danger + step, 0), 2)
             dangerChanged()
+        case .backpackMode:
+            settings.freeBuild.toggle()
         default:
             break
         }
@@ -868,6 +909,8 @@ final class Game {
             let settings = GameSettings.shared
             settings.danger = (settings.danger + 1) % 3
             dangerChanged()
+        case .backpackMode:
+            adjust(item, by: 1)
         case .critterBook:
             menuReturn = screen
             screen = .critterBook
@@ -920,6 +963,7 @@ final class Game {
         switch screen {
         case .playing: pause()
         case .starMap: closeStarMap()
+        case .backpack: closeBackpack()
         default: goBack()
         }
     }
@@ -986,7 +1030,7 @@ final class Game {
         guard index != hotbarIndex, hotbar.indices.contains(index) else { return }
         hotbarIndex = index
         Sound.shared.play("hotbar")
-        Speaker.shared.say(BlockRegistry.shared.name(hotbar[index]))
+        Speaker.shared.say(ItemCatalog.shared.name(hotbar[index]))
     }
 
     // MARK: Saving

@@ -38,6 +38,11 @@ final class GameSettings {
     static let musicLevelNames = ["Off", "Low", "Medium", "High"]
     static let dangerNames = ["Off", "Gentle", "Tough"]
 
+    /// Backpack: false collects blocks and uses them up when building; true gives you everything.
+    var freeBuild: Bool {
+        didSet { UserDefaults.standard.set(freeBuild, forKey: "freeBuild") }
+    }
+
     /// 0: nothing can hurt you. 1: hearts and a few Grumblers. 2: more Grumblers and falls hurt.
     var danger: Int {
         didSet { UserDefaults.standard.set(danger, forKey: "danger") }
@@ -90,6 +95,7 @@ final class GameSettings {
         // First launch picks a random name and colour, so friends' devices start out different.
         musicLevel = defaults.object(forKey: "musicLevel") as? Int ?? 2
         danger = defaults.object(forKey: "danger") as? Int ?? 1
+        freeBuild = defaults.bool(forKey: "freeBuild")
         soundEffects = defaults.object(forKey: "soundEffects") as? Bool ?? true
         let name = defaults.object(forKey: "playerName") as? Int ?? Int.random(in: 0..<GameSettings.playerNames.count)
         let color = defaults.object(forKey: "playerColor") as? Int ?? Int.random(in: 0..<GameSettings.playerColors.count)

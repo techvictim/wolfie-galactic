@@ -63,6 +63,11 @@ final class BlockRegistry {
         if hotbar.isEmpty { hotbar = [1] }
     }
 
+    /// Every block id defined in blocks.json, in order.
+    var allIDs: [UInt8] {
+        defs.keys.sorted()
+    }
+
     func name(_ id: UInt8) -> String {
         if id == B.laser { return "Laser" }
         return defs[id]?.name ?? "Block"

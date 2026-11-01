@@ -114,7 +114,7 @@ extension Game {
         }
 
         // Tough: big falls hurt.
-        if danger >= 2 && !wasOnGround && player.onGround && fallSpeed < -19 {
+        if danger >= 2 && !wasOnGround && player.onGround && fallSpeed < -19 && critterClock - jumpPadClock > 4 {
             hurt(fallSpeed < -27 ? 2 : 1)
         }
 
