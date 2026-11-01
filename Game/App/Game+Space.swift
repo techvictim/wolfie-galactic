@@ -87,7 +87,7 @@ extension Game {
         if dockPrompt != dock.map({ docks[$0] ?? .starship }) {
             dockPrompt = dock.map { docks[$0] ?? .starship }
         }
-        if frame.openMap {
+        if frame.openMap || frame.usePressed {
             if let dock, let other = docks[dock] {
                 swapShip(&v, dock: dock, for: other)
             } else {

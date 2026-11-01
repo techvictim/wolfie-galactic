@@ -136,6 +136,7 @@ final class Game {
     @ObservationIgnored var cameraCrowded = false
     @ObservationIgnored var lastMePosition: SIMD3<Float>?
     @ObservationIgnored var recentBlasts: [Float] = []
+    @ObservationIgnored var sprinting = false
     /// Weapons (see Game+Weapons.swift).
     @ObservationIgnored let armory = Armory()
     /// The Red Glitch (see Game+Glitch.swift).
@@ -324,15 +325,7 @@ final class Game {
         applyViewDistance()
 
         for child in Array(skyBodies.children) { child.removeFromParent() }
-        for body in planet.skyBodies where body.direction.count == 3 {
-            let direction = simd_normalize(SIMD3<Float>(body.direction[0], body.direction[1], body.direction[2]))
-            let sphere = ModelEntity(
-                mesh: .generateSphere(radius: body.size * Game.skyRadius / 400),
-                materials: [UnlitMaterial(color: Game.color(BlockRegistry.parseHex(body.color)))]
-            )
-            sphere.position = direction * Game.skyRadius * 0.82
-            skyBodies.addChild(sphere)
-        }
+        skyBodies.addChild(SkyDecor.build(for: planet, radius: Game.skyRadius))
 
         placeVehicles()
         syncCamera()
@@ -528,6 +521,7 @@ final class Game {
             return
         }
 
+        if frame.perspective { switchView() }
         let lookY = frame.look.y * (settings.invertLook ? -1 : 1)
         player.yaw += frame.look.x * settings.lookMultiplier
         player.pitch = min(max(player.pitch + lookY * settings.lookMultiplier, -1.5), 1.5)
@@ -554,7 +548,10 @@ final class Game {
         let wasOnGround = player.onGround
         let wasFlying = player.flying
         let fallSpeed = player.velocity.y
-        player.step(dt: dt, move: frame.move, jump: frame.jump, descend: frame.descend, gravity: planet.gravity, world: world)
+        // Sprint, like Minecraft: press L3 and it lasts until you stop.
+        if frame.sprintPressed { sprinting.toggle() }
+        if simd_length(frame.move) < 0.2 { sprinting = false }
+        player.step(dt: dt, move: frame.move, jump: frame.jump, descend: frame.descend, gravity: planet.gravity, world: world, sprint: sprinting)
         if flying != player.flying { flying = player.flying }
         playMovementSounds(dt: dt, wasOnGround: wasOnGround, wasFlying: wasFlying, fallSpeed: fallSpeed)
         syncCamera()
@@ -562,7 +559,10 @@ final class Game {
         // Vehicles: walk up to one and press Y (F on a keyboard) to get in.
         let reachable = vehicleInReach()
         if nearVehicle != reachable { nearVehicle = reachable }
-        if let reachable, frame.openMap { board(reachable) }
+        if let reachable, frame.openMap || (frame.usePressed && lookingAt(reachable)) {
+            board(reachable)
+            return
+        }
 
         // A critter in front of the nearest block takes the laser, or a pat instead of building.
         updateMe(dt: dt)
@@ -971,7 +971,7 @@ final class Game {
             syncCamera()
             if !UserDefaults.standard.bool(forKey: "seenWeapons") {
                 UserDefaults.standard.set(true, forKey: "seenWeapons")
-                show("New! Wolfie Military weapons are in your backpack. Press \(keyboardMode ? "I" : "X")")
+                show("New! Wolfie Military weapons are in your backpack. Press \(keyboardMode ? "I" : Btn.triangle)")
             }
             #if os(macOS)
             input.capturePointer()

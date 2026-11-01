@@ -96,7 +96,7 @@ final class SpaceScene {
     }
 
     /// A planet model centred on its holder, each voxel `voxel` blocks wide.
-    private static func ball(_ name: String, voxel: Float) -> Entity? {
+    static func ball(_ name: String, voxel: Float) -> Entity? {
         guard let model = DetailModels.entity(named: name), let size = DetailModels.size(named: name) else { return nil }
         let holder = Entity()
         // Models sit on their bottom; lift the centre to the holder's origin. Units here are voxels / 4.

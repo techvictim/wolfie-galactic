@@ -306,14 +306,14 @@ extension Game {
             rememberSpots()
             shareVehicle(v, on: planet.id, driver: nil)
             Sound.shared.play("vehicle-in", volume: 0.8)
-            show("Your \(kind.displayName) is ready! Press \(keyboardMode ? "F" : "Y") to get in")
+            show("Your \(kind.displayName) is ready! Press \(keyboardMode ? "F" : Btn.use) to get in")
             return true
         }
     }
 
     private func outOf(_ item: Item) {
         let name = ItemCatalog.shared.name(item)
-        let button = keyboardMode ? "I" : "X"
+        let button = keyboardMode ? "I" : Btn.triangle
         show(affordableRecipe(item) != nil ? "Out of \(name). Make more in your backpack (\(button))" : "Out of \(name). Collect more!")
     }
 

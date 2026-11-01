@@ -40,11 +40,19 @@ struct InputFrame {
     var menuStep = 0
     /// Up/down once per push, for menus. Down is +1.
     var menuMove = 0
+    /// L2 pressed this frame (Minecraft's "use"): get in a vehicle you're looking at, swap ships.
+    var usePressed = false
+    /// ○ pressed this frame (Minecraft's "sneak / dismount"): get out of a vehicle.
+    var dismount = false
+    /// L3 (or Ctrl): sprint, like Minecraft.
+    var sprintPressed = false
+    /// D-pad up (or V): see your character from behind, or look through their eyes.
+    var perspective = false
 }
 
 /// The keys the game uses, on any keyboard.
 enum Key: CaseIterable {
-    case w, a, s, d, q, e, f, y, p, c, m, h, slash, tab, i
+    case w, a, s, d, q, e, f, y, p, c, m, h, slash, tab, i, v, r
     case space, enter, escape
     case up, down, left, right
     case one, two, three, four, five, six
@@ -59,6 +67,9 @@ enum Key: CaseIterable {
 @MainActor
 final class InputController {
     static let stickLookSpeed: Float = 2.6
+    /// Show PlayStation buttons (✕ ○ △ □, L2, R2…). They play with a DualSense, so it's the default
+    /// until an Xbox controller shows up.
+    nonisolated(unsafe) static var playStation = true
     static let mouseLookSpeed: Float = 0.0025
 
     private var previous: [String: Bool] = [:]
@@ -86,7 +97,7 @@ final class InputController {
     private var macShiftDown = false
     private var keyMonitor: Any?
     private static let macKeyCodes: [Key: UInt16] = [
-        .w: 13, .a: 0, .s: 1, .d: 2, .q: 12, .e: 14, .f: 3, .y: 16, .p: 35, .c: 8, .m: 46, .h: 4, .slash: 44, .tab: 48, .i: 34,
+        .w: 13, .a: 0, .s: 1, .d: 2, .q: 12, .e: 14, .f: 3, .y: 16, .p: 35, .c: 8, .m: 46, .h: 4, .slash: 44, .tab: 48, .i: 34, .v: 9, .r: 15,
         .space: 49, .enter: 36, .escape: 53,
         .up: 126, .down: 125, .left: 123, .right: 124,
         .one: 18, .two: 19, .three: 20, .four: 21, .five: 23, .six: 22
@@ -208,6 +219,8 @@ final class InputController {
         case .slash: code = .slash
         case .tab: code = .tab
         case .i: code = .keyI
+        case .v: code = .keyV
+        case .r: code = .keyR
         case .space: code = .spacebar
         case .enter: code = .returnOrEnter
         case .escape: code = .escape
@@ -258,28 +271,48 @@ final class InputController {
             // Squared response: gentle near the centre for precise aiming.
             frame.look.x -= rx * abs(rx) * InputController.stickLookSpeed * dt
             frame.look.y += ry * abs(ry) * InputController.stickLookSpeed * 0.75 * dt
+            // Minecraft's PlayStation layout: ✕ jump/fly up · ○ sneak, get out, fly down ·
+            // △ inventory · □ crafting · R2 break/fire · L2 place/use · L1 R1 hotbar ·
+            // L3 sprint · R3 fly down · D-pad up camera view · touchpad (or D-pad down) map ·
+            // Options pause · Create the controls card.
+            let r3 = pad.rightThumbstickButton?.isPressed ?? false
+            let l3 = pad.leftThumbstickButton?.isPressed ?? false
             frame.jump = frame.jump || pad.buttonA.isPressed
-            frame.descend = frame.descend || pad.buttonB.isPressed
+            frame.descend = frame.descend || pad.buttonB.isPressed || r3
             frame.breakHeld = frame.breakHeld || pad.rightTrigger.isPressed
             frame.placeHeld = frame.placeHeld || pad.leftTrigger.isPressed
             let id = "pad\(i)"
             if pressed(id + ".rb", pad.rightShoulder.isPressed) { frame.hotbarStep += 1 }
             if pressed(id + ".lb", pad.leftShoulder.isPressed) { frame.hotbarStep -= 1 }
-            if pressed(id + ".y", pad.buttonY.isPressed) { frame.openMap = true }
+            if pressed(id + ".y", pad.buttonY.isPressed) { frame.backpack = true }
             if pressed(id + ".x", pad.buttonX.isPressed) { frame.action = true }
+            if pressed(id + ".lt", pad.leftTrigger.isPressed) { frame.usePressed = true }
+            if pressed(id + ".l3", l3) { frame.sprintPressed = true }
             if pressed(id + ".options", pad.buttonOptions?.isPressed ?? false) { frame.help = true }
             if pressed(id + ".a", pad.buttonA.isPressed) {
                 frame.confirm = true
                 frame.jumpPressed = true
             }
-            if pressed(id + ".b", pad.buttonB.isPressed) { frame.cancel = true }
+            if pressed(id + ".b", pad.buttonB.isPressed) {
+                frame.cancel = true
+                frame.dismount = true
+            }
             // Options / Menu (≡) pauses on every device.
             if pressed(id + ".menu", pad.buttonMenu.isPressed) { frame.pause = true }
             if pressed(id + ".right", lx > 0.6 || pad.dpad.right.isPressed) { frame.menuStep += 1 }
             if pressed(id + ".left", lx < -0.6 || pad.dpad.left.isPressed) { frame.menuStep -= 1 }
             if pressed(id + ".down", ly < -0.6 || pad.dpad.down.isPressed) { frame.menuMove += 1 }
             if pressed(id + ".up", ly > 0.6 || pad.dpad.up.isPressed) { frame.menuMove -= 1 }
-            if pressed(id + ".dpadUp", pad.dpad.up.isPressed) { frame.map = true }
+            if pressed(id + ".dpadUp", pad.dpad.up.isPressed) { frame.perspective = true }
+            var touchpad = false
+            if let sense = pad as? GCDualSenseGamepad { touchpad = sense.touchpadButton.isPressed }
+            if let shock = pad as? GCDualShockGamepad { touchpad = touchpad || shock.touchpadButton.isPressed }
+            if pressed(id + ".map", touchpad || pad.dpad.down.isPressed) { frame.map = true }
+            if pad is GCDualSenseGamepad || pad is GCDualShockGamepad {
+                InputController.playStation = true
+            } else if pad is GCXboxGamepad {
+                InputController.playStation = false
+            }
 
             let active = lx != 0 || ly != 0 || rx != 0 || ry != 0 || pad.buttonA.isPressed
                 || pad.rightTrigger.isPressed || pad.leftTrigger.isPressed
@@ -330,6 +363,11 @@ final class InputController {
             frame.map = true
             usingKeyboard = true
         }
+        if pressed("key.view", isDown(.v)) {
+            frame.perspective = true
+            usingKeyboard = true
+        }
+        if pressed("key.sprint", isDown(.r)) { frame.sprintPressed = true }
         if pressed("key.help", isDown(.slash)) {
             frame.help = true
             usingKeyboard = true

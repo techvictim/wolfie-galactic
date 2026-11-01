@@ -28,7 +28,7 @@ struct CrewPicker: View {
                             .onTapGesture { game.tapCrew(index) }
                     }
                 }
-                Text(game.keyboardMode ? "Arrow keys to look · Return to pick · Esc to go back" : "Pick with A · B to go back")
+                Text(game.keyboardMode ? "Arrow keys to look · Return to pick · Esc to go back" : "Pick with \(Btn.cross) · \(Btn.circle) to go back")
                     .font(.game(14).weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.55))
                     .oneLine()

@@ -173,11 +173,17 @@ extension Game {
 
     // MARK: Driving and flying
 
+    private func shipLanded(_ v: Vehicle) -> Bool {
+        let ground = Float(world.surfaceY(x: Int(floor(v.position.x)), z: Int(floor(v.position.z))))
+        return v.position.y - ground < 2.5
+    }
+
     func updateDriving(_ frame: InputFrame, dt: Float) {
         guard let id = driving, var v = vehicles[id] else { return }
         let kind = v.kind
 
-        if frame.openMap {
+        // ○ gets out, like dismounting in Minecraft. Ships need to land first, since ○ also flies down.
+        if frame.openMap || (frame.dismount && (!kind.isShip || shipLanded(v))) {
             getOut()
             return
         }

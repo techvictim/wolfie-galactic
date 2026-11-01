@@ -47,7 +47,7 @@ struct StoryView: View {
                             .frame(width: i == game.storyIndex ? 26 : 10, height: 10)
                     }
                 }
-                Text(game.keyboardMode ? "Return for next · Esc to skip" : "A for next · B to skip")
+                Text(game.keyboardMode ? "Return for next · Esc to skip" : "\(Btn.cross) for next · \(Btn.circle) to skip")
                     .font(.game(15).weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.55))
             }

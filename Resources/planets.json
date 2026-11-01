@@ -36,6 +36,7 @@
       "skyBodies": [
         {
           "color": "#d9dcf0",
+          "model": "space-pup-moon",
           "size": 34,
           "direction": [
             -0.55,
@@ -45,6 +46,7 @@
         },
         {
           "color": "#ff9a6b",
+          "model": "space-glimmer",
           "size": 16,
           "direction": [
             0.7,
@@ -98,6 +100,7 @@
       "skyBodies": [
         {
           "color": "#4fd1b0",
+          "model": "space-wolfie-world",
           "size": 70,
           "direction": [
             0.45,
@@ -107,6 +110,7 @@
         },
         {
           "color": "#ff9a6b",
+          "model": "space-glimmer",
           "size": 12,
           "direction": [
             -0.6,
@@ -169,6 +173,7 @@
         },
         {
           "color": "#4fd1b0",
+          "model": "space-wolfie-world",
           "size": 10,
           "direction": [
             0.8,

@@ -223,7 +223,7 @@ struct HUDView: View {
                 Spacer()
                 if let prompt = game.petPrompt {
                     HStack(spacing: 10) {
-                        ButtonBadge(letter: game.keyboardMode ? "Right-click" : "LT")
+                        ButtonBadge(letter: game.keyboardMode ? "Right-click" : Btn.use)
                         Text(prompt)
                             .font(.game(20).weight(.bold))
                         Image(systemName: "heart.fill")
@@ -236,7 +236,7 @@ struct HUDView: View {
                     .allowsHitTesting(false)
                 } else if let kind = game.dockPrompt, game.place == .space, !game.starMapOpen {
                     HStack(spacing: 10) {
-                        ButtonBadge(letter: game.keyboardMode ? "F" : "Y")
+                        ButtonBadge(letter: game.keyboardMode ? "F" : Btn.use)
                         Text("Switch to the \(kind.name)")
                             .font(.game(20).weight(.bold))
                     }
@@ -247,7 +247,7 @@ struct HUDView: View {
                     .allowsHitTesting(false)
                 } else if let kind = game.nearVehicleKind, !game.starMapOpen {
                     HStack(spacing: 10) {
-                        ButtonBadge(letter: game.keyboardMode ? "F" : "Y")
+                        ButtonBadge(letter: game.keyboardMode ? "F" : Btn.use)
                         Text(kind.isShip ? "Fly the \(kind.name)" : "Drive the \(kind.name)")
                             .font(.game(20).weight(.bold))
                     }
@@ -321,10 +321,10 @@ struct HelpCard: View {
         [
             ([kb ? "Mouse" : "R stick"], "Steer: left, right, up, down"),
             ([kb ? "W  S" : "L stick"], "Faster and slower"),
-            ([kb ? "Space" : "A", kb ? "Shift" : "B"], "Rise and sink"),
-            ([kb ? "Click" : "RT"], "Fire lasers"),
-            ([kb ? "M" : "X"], "Hyperspace to another planet"),
-            ([kb ? "F" : "Y"], "Swap ships at the spaceport"),
+            ([kb ? "Space" : Btn.cross, kb ? "Shift" : Btn.circle], "Rise and sink"),
+            ([kb ? "Click" : Btn.fire], "Fire lasers"),
+            ([kb ? "M" : Btn.square], "Hyperspace to another planet"),
+            ([kb ? "F" : Btn.use], "Swap ships at the spaceport"),
             ([], "Fly into the planet to land")
         ]
     }
@@ -336,36 +336,37 @@ struct HelpCard: View {
                 ([kb ? "Mouse" : "R stick"], "Steer: left, right, up, down"),
                 ([kb ? "W" : "L stick ↑"], "Faster"),
                 ([kb ? "S" : "L stick ↓"], "Slower, then backwards"),
-                ([kb ? "Space" : "A", kb ? "Shift" : "B"], "Rise and sink"),
-                ([kb ? "Click" : "RT"], "Fire lasers"),
-                ([kb ? "M" : "X"], "Star map: fly to a planet"),
-                ([kb ? "F" : "Y"], "Get out"),
+                ([kb ? "Space" : Btn.cross, kb ? "Shift" : Btn.circle], "Rise and sink"),
+                ([kb ? "Click" : Btn.fire], "Fire lasers"),
+                ([kb ? "M" : Btn.square], "Star map: fly to a planet"),
+                ([kb ? "F" : Btn.circle], "Get out (land first)"),
                 ([], "Fly up and up to reach space")
             ]
         case .rover, .buggy, .hoverbike:
             return [
                 ([kb ? "W A S D" : "L stick"], "Drive and steer"),
                 ([kb ? "Mouse" : "R stick"], "Look around"),
-                ([kb ? "Space" : "A"], "Hop"),
-                ([kb ? "Click" : "RT"], "Fire lasers"),
-                ([kb ? "H" : "X"], "Honk!"),
-                ([kb ? "F" : "Y"], "Get out")
+                ([kb ? "Space" : Btn.cross], "Hop"),
+                ([kb ? "Click" : Btn.fire], "Fire lasers"),
+                ([kb ? "H" : Btn.square], "Honk!"),
+                ([kb ? "F" : Btn.circle], "Get out")
             ]
         case nil:
             var rows: [([String], String)] = [
                 ([kb ? "W A S D" : "L stick"], "Walk"),
                 ([kb ? "Mouse" : "R stick"], "Look around"),
-                ([kb ? "Space" : "A"], flying ? "Fly up" : "Jump · double-tap to fly"),
+                ([kb ? "Space" : Btn.cross], flying ? "Fly up" : "Jump · double-tap to fly"),
             ]
-            if flying { rows.append(([kb ? "Shift" : "B"], "Fly down · land on the ground")) }
+            if flying { rows.append(([kb ? "Shift" : Btn.circle], "Fly down · land on the ground")) }
             rows += [
-                ([kb ? "Click" : "RT"], "Break blocks · fire the laser or weapon"),
-                ([kb ? "Right-click" : "LT"], "Place a block · pet a critter · Sniper scope · set off Remotes"),
-                ([kb ? "Q  E" : "LB  RB"], "Pick from the hotbar"),
-                ([kb ? "F" : "Y"], "Get in a vehicle or ship"),
-                ([kb ? "I" : "X"], "Backpack: weapons, blocks, builds and vehicles"),
-                ([kb ? "Tab" : "D-pad ↑"], "Map: find friends and zoom to them"),
-                ([kb ? "Esc" : "≡"], "Pause, Critter Book, settings")
+                ([kb ? "Click" : Btn.fire], "Break blocks · fire the laser or weapon"),
+                ([kb ? "Right-click" : Btn.use], "Place · pet a critter · get in a vehicle · Sniper scope · Remotes"),
+                ([kb ? "Q  E" : Btn.bumpers], "Pick from the hotbar"),
+                ([kb ? "I" : Btn.triangle, kb ? "M" : Btn.square], "Backpack and crafting"),
+                ([kb ? "R" : Btn.sprint], "Sprint"),
+                ([kb ? "V" : Btn.view], "Camera: behind you, or through your eyes"),
+                ([kb ? "Tab" : Btn.map], "Map: find friends, nests, and zoom there"),
+                ([kb ? "Esc" : Btn.pause], "Pause, Critter Book, settings")
             ]
             return rows
         }
@@ -417,7 +418,7 @@ struct MapScreen: View {
                                 MenuRow(game: game, item: item, selected: index == game.menuIndex, big: false)
                             }
                         }
-                        Text(game.keyboardMode ? "↑ ↓ to choose · Return to go there · Tab or Esc to close" : "Stick to choose · A to go there · B to close")
+                        Text(game.keyboardMode ? "↑ ↓ to choose · Return to go there · Tab or Esc to close" : "Stick to choose · \(Btn.cross) to go there · \(Btn.circle) to close")
                             .font(.game(13).weight(.semibold))
                             .foregroundStyle(.white.opacity(0.6))
                             .oneLine()
@@ -586,7 +587,7 @@ struct CritterBookView: View {
                 Text("Critter book")
                     .font(.game(40).weight(.heavy))
                     .foregroundStyle(.white)
-                Text("\(game.foundCritters.count) of \(kinds.count) found · look at a critter and press \(game.keyboardMode ? "right-click" : "LT") to make friends")
+                Text("\(game.foundCritters.count) of \(kinds.count) found · look at a critter and press \(game.keyboardMode ? "right-click" : Btn.use) to make friends")
                     .font(.game(16).weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.7))
                     .oneLine()
@@ -803,7 +804,7 @@ struct BackpackScreen: View {
                 }
                 .foregroundStyle(.white)
                 HStack(spacing: 10) {
-                    Text(kb ? "Q" : "LB").font(.game(13).weight(.heavy)).foregroundStyle(.white.opacity(0.5))
+                    Text(kb ? "Q" : (Btn.ps ? "L1" : "LB")).font(.game(13).weight(.heavy)).foregroundStyle(.white.opacity(0.5))
                     ForEach(ItemGroup.allCases, id: \.rawValue) { group in
                         let on = group == game.backpackTab
                         HStack(spacing: 6) {
@@ -820,7 +821,7 @@ struct BackpackScreen: View {
                             game.backpackIndex = 0
                         }
                     }
-                    Text(kb ? "E" : "RB").font(.game(13).weight(.heavy)).foregroundStyle(.white.opacity(0.5))
+                    Text(kb ? "E" : (Btn.ps ? "R1" : "RB")).font(.game(13).weight(.heavy)).foregroundStyle(.white.opacity(0.5))
                 }
                 .oneLine()
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(UIMetrics.points(124)), spacing: UIMetrics.points(10)), count: Game.backpackColumns),
@@ -834,7 +835,7 @@ struct BackpackScreen: View {
                     BackpackDetail(game: game, item: items[game.backpackIndex])
                 }
                 Text(kb ? "Arrows to choose · Return to hold it · M to make one · I or Esc to close"
-                        : "Stick to choose · A to hold it · X to make one · B to close")
+                        : "Stick to choose · \(Btn.cross) to hold it · \(Btn.square) to make one · \(Btn.circle) to close")
                     .font(.game(13).weight(.semibold))
                     .foregroundStyle(.white.opacity(0.6))
                     .oneLine()
@@ -1069,8 +1070,8 @@ struct StarMapView: View {
 
                 HStack(spacing: 22) {
                     HStack(spacing: 8) { ButtonBadge(letter: "◀▶"); Text("Choose") }
-                    HStack(spacing: 8) { ButtonBadge(letter: game.keyboardMode ? "⏎" : "A"); Text(game.place == .space ? "Hyperspace" : "Fly") }
-                    HStack(spacing: 8) { ButtonBadge(letter: game.keyboardMode ? "esc" : "B"); Text("Stay here") }
+                    HStack(spacing: 8) { ButtonBadge(letter: game.keyboardMode ? "⏎" : Btn.cross); Text(game.place == .space ? "Hyperspace" : "Fly") }
+                    HStack(spacing: 8) { ButtonBadge(letter: game.keyboardMode ? "esc" : Btn.circle); Text("Stay here") }
                 }
                 .font(.game(17))
                 .foregroundStyle(Color.white.opacity(0.85))
@@ -1186,7 +1187,7 @@ struct TitleView: View {
                 }
             }
             .frame(maxWidth: UIMetrics.points(400))
-            Text(game.keyboardMode ? "Arrows to choose · Return to go" : "Stick to choose · A to go")
+            Text(game.keyboardMode ? "Arrows to choose · Return to go" : "Stick to choose · \(Btn.cross) to go")
                 .font(.game(13).weight(.semibold))
                 .foregroundStyle(Color.white.opacity(0.6))
                 .oneLine()
@@ -1278,9 +1279,9 @@ struct MenuPanel: View {
 
     private var hint: String {
         if game.screen == .settings || game.screen == .friends {
-            return game.keyboardMode ? "Arrows to choose and change · Esc to go back" : "Stick to choose and change · B to go back"
+            return game.keyboardMode ? "Arrows to choose and change · Esc to go back" : "Stick to choose and change · \(Btn.circle) to go back"
         }
-        return game.keyboardMode ? "Arrows to choose · Return to pick · Esc to keep playing" : "Stick to choose · A to pick · B to keep playing"
+        return game.keyboardMode ? "Arrows to choose · Return to pick · Esc to keep playing" : "Stick to choose · \(Btn.cross) to pick · \(Btn.circle) to keep playing"
     }
 }
 
@@ -1330,21 +1331,25 @@ struct ControlsPanel: View {
         let pad: [String]
     }
 
-    static let rows: [Row] = [
+    static var rows: [Row] { [
         Row(action: "Walk", keys: ["W", "A", "S", "D"], keysNote: "or arrow keys", pad: ["Left stick"]),
+        Row(action: "Sprint", keys: ["R"], keysNote: nil, pad: [Btn.sprint]),
         Row(action: "Look around", keys: ["Mouse"], keysNote: "click the game first", pad: ["Right stick"]),
-        Row(action: "Jump", keys: ["Space"], keysNote: nil, pad: ["A"]),
-        Row(action: "Start or stop flying", keys: ["Space", "Space"], keysNote: "double-tap", pad: ["A", "A"]),
-        Row(action: "Fly up, fly down", keys: ["Space", "Shift"], keysNote: "or C to go down", pad: ["A", "B"]),
-        Row(action: "Break a block, fire the laser", keys: ["Left click"], keysNote: "hold to keep going", pad: ["RT"]),
-        Row(action: "Place a block, pet a critter", keys: ["Right click"], keysNote: nil, pad: ["LT"]),
-        Row(action: "Pick from the hotbar", keys: ["1", "–", "6"], keysNote: "or Q and E", pad: ["LB", "RB"]),
-        Row(action: "Get in or out of the rover or starship", keys: ["F"], keysNote: "or Y", pad: ["Y"]),
-        Row(action: "Starship: star map · Rover: honk", keys: ["M", "H"], keysNote: nil, pad: ["X"]),
-        Row(action: "Pause, settings, controls", keys: ["Esc"], keysNote: "or P", pad: ["Menu ≡"]),
+        Row(action: "Jump", keys: ["Space"], keysNote: nil, pad: [Btn.cross]),
+        Row(action: "Start or stop flying", keys: ["Space", "Space"], keysNote: "double-tap", pad: [Btn.cross, Btn.cross]),
+        Row(action: "Fly up, fly down", keys: ["Space", "Shift"], keysNote: "or C to go down", pad: [Btn.cross, Btn.circle]),
+        Row(action: "Break a block, fire", keys: ["Left click"], keysNote: "hold to keep going", pad: [Btn.fire]),
+        Row(action: "Place a block, pet a critter, get in a vehicle", keys: ["Right click"], keysNote: nil, pad: [Btn.use]),
+        Row(action: "Pick from the hotbar", keys: ["1", "–", "6"], keysNote: "or Q and E", pad: Btn.ps ? ["L1", "R1"] : ["LB", "RB"]),
+        Row(action: "Backpack, crafting", keys: ["I"], keysNote: nil, pad: [Btn.triangle, Btn.square]),
+        Row(action: "Get out of a vehicle", keys: ["F"], keysNote: nil, pad: [Btn.circle]),
+        Row(action: "Starship: star map · Rover: honk", keys: ["M", "H"], keysNote: nil, pad: [Btn.square]),
+        Row(action: "Camera: behind you or your eyes", keys: ["V"], keysNote: nil, pad: [Btn.view]),
+        Row(action: "Map", keys: ["Tab"], keysNote: nil, pad: [Btn.map]),
+        Row(action: "Pause, settings, controls", keys: ["Esc"], keysNote: "or P", pad: [Btn.pause]),
         Row(action: "Let go of the mouse", keys: ["Esc"], keysNote: nil, pad: []),
-        Row(action: "In menus: choose, pick, go back", keys: ["↑", "↓", "Return", "Esc"], keysNote: nil, pad: ["Stick", "A", "B"])
-    ]
+        Row(action: "In menus: choose, pick, go back", keys: ["↑", "↓", "Return", "Esc"], keysNote: nil, pad: ["Stick", Btn.cross, Btn.circle])
+    ] }
 
     #if os(tvOS)
     private let showKeyboard = false
@@ -1409,7 +1414,7 @@ struct ControlsPanel: View {
 
                 MenuRow(game: game, item: .back, selected: true, big: false)
                     .frame(maxWidth: UIMetrics.points(320))
-                Text(game.keyboardMode ? "Esc or Return to go back" : "B or A to go back")
+                Text(game.keyboardMode ? "Esc or Return to go back" : "\(Btn.circle) or \(Btn.cross) to go back")
                     .font(.game(13).weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.6))
                     .oneLine()

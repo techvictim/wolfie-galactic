@@ -389,7 +389,7 @@ extension Game {
                     s.velocity = .zero
                     Sound.shared.play("stick", at: s.position, listener: player.eye, facing: player.yaw, volume: 0.6)
                     if s.remote && armory.shots.filter({ $0.remote && $0.stuck }).isEmpty {
-                        show("Stuck on! Press \(keyboardMode ? "right-click" : "LT") to set them off")
+                        show("Stuck on! Press \(keyboardMode ? "right-click" : Btn.use) to set them off")
                     }
                     break
                 }

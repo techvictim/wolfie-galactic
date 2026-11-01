@@ -50,6 +50,8 @@ struct Planet: Codable, Identifiable, Sendable {
         let color: String
         let size: Float
         let direction: [Float]
+        /// A planet's own voxel model (space-<id>), so it looks like itself instead of a flat circle.
+        var model: String?
     }
 
     let id: String

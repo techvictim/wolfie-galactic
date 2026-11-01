@@ -30,6 +30,24 @@ extension Game {
         me.animate(dt: dt, speed: speed, pitch: player.pitch, flying: jetting, aiming: laserSelected || (weapon?.aimed ?? false))
     }
 
+    /// D-pad up: behind your character, or through their eyes.
+    func switchView() {
+        let settings = GameSettings.shared
+        settings.viewBehind.toggle()
+        Sound.shared.play("hotbar", volume: 0.6)
+        show(settings.viewBehind ? "Camera: behind \(crewMember.name)" : "Camera: \(crewMember.name)'s eyes")
+    }
+
+    /// Roughly looking at a vehicle (for L2 to get in).
+    func lookingAt(_ id: String) -> Bool {
+        guard let v = vehicles[id] else { return false }
+        let center = v.position + SIMD3<Float>(0, v.kind.isShip ? 2 : 1, 0)
+        let to = center - aimOrigin
+        let d = simd_length(to)
+        if d < 3 { return true }
+        return simd_dot(to / max(d, 0.01), player.lookDirection) > (v.kind.isShip ? 0.7 : 0.8)
+    }
+
     // MARK: Picking a character
 
     func openCrewPicker() {

@@ -123,19 +123,20 @@ struct Player {
         if !flying { velocity.y = max(velocity.y, v.y) }
     }
 
-    mutating func step(dt: Float, move: SIMD2<Float>, jump: Bool, descend: Bool = false, gravity: Float, world: World) {
+    mutating func step(dt: Float, move: SIMD2<Float>, jump: Bool, descend: Bool = false, gravity: Float, world: World, sprint: Bool = false) {
+        let boost: Float = sprint ? 1.6 : 1
         let forward = SIMD3<Float>(-sin(yaw), 0, -cos(yaw))
         let right = SIMD3<Float>(cos(yaw), 0, -sin(yaw))
         var wish = forward * move.y + right * move.x
         let length = simd_length(wish)
         if length > 1 { wish /= length }
         if flying {
-            velocity.x = wish.x * Player.flySpeed + push.x
-            velocity.z = wish.z * Player.flySpeed + push.z
+            velocity.x = wish.x * Player.flySpeed * boost + push.x
+            velocity.z = wish.z * Player.flySpeed * boost + push.z
             velocity.y = ((jump ? 1 : 0) - (descend ? 1 : 0)) * Player.flyClimb
         } else {
-            velocity.x = wish.x * Player.walkSpeed + push.x
-            velocity.z = wish.z * Player.walkSpeed + push.z
+            velocity.x = wish.x * Player.walkSpeed * boost + push.x
+            velocity.z = wish.z * Player.walkSpeed * boost + push.z
             if jump && onGround { velocity.y = Player.jumpSpeed }
             velocity.y = max(velocity.y - gravity * dt, -30)
         }
