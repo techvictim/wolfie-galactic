@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Observation
 import RealityKit
@@ -117,6 +118,10 @@ final class Game {
     @ObservationIgnored var otherWorlds: [String: World] = [:]
     /// Where each vehicle is on each planet, and who's driving it.
     @ObservationIgnored var vehicleNotes: [String: [String: VehicleNote]] = [:]
+    // The map (see Game+Map.swift).
+    var mapImage: CGImage?
+    @ObservationIgnored var mapOrigin = SIMD2<Int>(0, 0)
+    @ObservationIgnored var mapPlanet = ""
     /// Planets the host has sent us, waiting to be landed on.
     @ObservationIgnored var arrivedPlanets: [String: [String: Data]] = [:]
     @ObservationIgnored var renderer: WorldRenderer!
@@ -356,6 +361,14 @@ final class Game {
             highlight.isEnabled = false
             updateMenu(frame)
             return
+        case .map:
+            if frame.map {
+                closeMap()
+                return
+            }
+            hideLaser()
+            updateMenu(frame)
+            return
         case .paused, .settings, .controls, .friends, .critterBook:
             if screen != .paused && menuReturn == .title { orbitCamera(dt: dt) }
             hideLaser()
@@ -368,6 +381,10 @@ final class Game {
         case .playing:
             if frame.pause {
                 pause()
+                return
+            }
+            if frame.map {
+                openMap()
                 return
             }
         }
@@ -641,7 +658,7 @@ final class Game {
     // MARK: Title, pause and settings
 
     enum Screen {
-        case title, playing, paused, settings, controls, starMap, friends, critterBook
+        case title, playing, paused, settings, controls, starMap, friends, critterBook, map
     }
 
     enum MenuItem: Hashable {
@@ -649,6 +666,7 @@ final class Game {
         case lookSpeed, invertLook, speakNames, viewDistance, restartPlanet, back
         case friends, hostGame, join(String), searching, yourName, yourColor
         case music, soundEffects, danger, critterBook
+        case map, goTo(Int), goToPlace(String)
     }
 
     /// Where Back goes from Settings or Controls.
@@ -660,7 +678,14 @@ final class Game {
         case .friends:
             let games: [MenuItem] = foundGames.isEmpty ? [.searching] : foundGames.map { .join($0.name) }
             return [.hostGame] + games + [.yourName, .yourColor, .back]
-        case .paused: return [.resume, .critterBook, .controls, .settings, .quitToTitle]
+        case .paused: return [.resume, .map, .critterBook, .controls, .settings, .quitToTitle]
+        case .map:
+            var items: [MenuItem] = friendSpots.map { .goTo($0.id) }
+            if place == .surface {
+                items.append(.goToPlace(Landmark.pad.rawValue))
+                if nearestSettlement != nil { items.append(.goToPlace(Landmark.settlement.rawValue)) }
+            }
+            return items + [.back]
         case .controls, .critterBook: return [.back]
         case .settings:
             return menuReturn == .paused && session == .solo
@@ -702,6 +727,17 @@ final class Game {
         case .soundEffects: return ("Sound effects", settings.soundEffects ? "On" : "Off")
         case .danger: return ("Danger", GameSettings.dangerNames[min(max(settings.danger, 0), 2)])
         case .critterBook: return ("Critter book", "\(foundCritters.count) of \(CritterCatalog.shared.kinds.count)")
+        case .map: return ("Map", session == .solo ? nil : "find friends")
+        case .goTo(let id):
+            guard let friend = friendSpots.first(where: { $0.id == id }) else { return ("Friend", nil) }
+            return ("Go to \(friend.name)", whereabouts(friend))
+        case .goToPlace(let name):
+            if name == Landmark.pad.rawValue {
+                let pad = world.padCenter
+                return ("Go to the landing pad", directions(to: SIMD2(Float(pad.x), Float(pad.y))))
+            }
+            guard let site = nearestSettlement else { return ("Go", nil) }
+            return ("Go to \(settlementName(site))", directions(to: SIMD2(Float(site.center.x), Float(site.center.y))))
         case .yourColor: return ("Your color", GameSettings.playerColorNames[min(max(settings.playerColor, 0), GameSettings.playerColorNames.count - 1)])
         }
     }
@@ -832,6 +868,12 @@ final class Game {
             menuReturn = screen
             screen = .critterBook
             menuIndex = 0
+        case .map:
+            openMap()
+        case .goTo(let id):
+            fastTravel(to: id)
+        case .goToPlace(let name):
+            if let landmark = Landmark(rawValue: name) { fastTravel(to: landmark) }
         case .music:
             let settings = GameSettings.shared
             settings.musicLevel = (settings.musicLevel + 1) % 4
@@ -846,6 +888,8 @@ final class Game {
             let from: MenuItem = screen == .settings ? .settings : (screen == .controls ? .controls : .critterBook)
             screen = menuReturn
             menuIndex = menuItems.firstIndex(of: from) ?? 0
+        case .map:
+            closeMap()
         case .friends:
             stopLooking()
             screen = menuReturn

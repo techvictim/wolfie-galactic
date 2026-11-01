@@ -64,6 +64,11 @@ struct GameView: View {
                     .transition(.opacity)
             }
 
+            if game.screen == .map {
+                MapScreen(game: game)
+                    .transition(.opacity)
+            }
+
             if game.entryGlow {
                 EntryGlow()
                     .ignoresSafeArea()
@@ -343,6 +348,7 @@ struct HelpCard: View {
                 ([kb ? "Right-click" : "LT"], "Place a block · pet a critter"),
                 ([kb ? "Q  E" : "LB  RB"], "Pick from the hotbar"),
                 ([kb ? "F" : "Y"], "Get in a vehicle or ship"),
+                ([kb ? "Tab" : "D-pad ↑"], "Map: find friends and zoom to them"),
                 ([kb ? "Esc" : "≡"], "Pause, Critter Book, settings")
             ]
             return rows
@@ -361,6 +367,135 @@ struct EntryGlow: View {
                 center: .center, startRadius: 60, endRadius: 950
             )
         }
+    }
+}
+
+// MARK: - Map
+
+/// The land around you from above, with everyone marked, and Go buttons for friends and landmarks.
+struct MapScreen: View {
+    let game: Game
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.height * 0.8, geo.size.width * 0.5)
+            ZStack {
+                Color(red: 0.04, green: 0.03, blue: 0.12).opacity(0.9)
+                    .ignoresSafeArea()
+                HStack(alignment: .center, spacing: UIMetrics.points(28)) {
+                    MapPicture(game: game)
+                        .frame(width: side, height: side)
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(game.place == .space ? "Map" : "Map of \(game.planet.name)")
+                            .font(.game(34).weight(.heavy))
+                            .foregroundStyle(.white)
+                            .oneLine()
+                        if game.session == .solo {
+                            Text("Host or join a game to see friends here.")
+                                .font(.game(15).weight(.semibold))
+                                .foregroundStyle(.white.opacity(0.6))
+                                .oneLine()
+                        }
+                        VStack(spacing: 10) {
+                            ForEach(Array(game.menuItems.enumerated()), id: \.offset) { index, item in
+                                MenuRow(game: game, item: item, selected: index == game.menuIndex, big: false)
+                            }
+                        }
+                        Text(game.keyboardMode ? "↑ ↓ to choose · Return to go there · Tab or Esc to close" : "Stick to choose · A to go there · B to close")
+                            .font(.game(13).weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .oneLine()
+                    }
+                    .frame(maxWidth: UIMetrics.points(460))
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .animation(.spring(duration: 0.2), value: game.menuIndex)
+    }
+}
+
+struct MapPicture: View {
+    let game: Game
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18).fill(Color.white.opacity(0.06))
+            if let image = game.mapImage {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .interpolation(.none)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+            } else {
+                ProgressView().tint(.white)
+            }
+            // Markers move with friends, so refresh them a few times a second.
+            TimelineView(.periodic(from: .now, by: 0.4)) { _ in
+                GeometryReader { geo in
+                    ForEach(game.mapMarkers) { marker in
+                        MapMarkerView(marker: marker)
+                            .position(x: marker.x * geo.size.width, y: marker.y * geo.size.height)
+                    }
+                }
+            }
+            Text("N")
+                .font(.game(14).weight(.heavy))
+                .foregroundStyle(.white)
+                .padding(6)
+                .background(Circle().fill(Color.black.opacity(0.5)))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(8)
+        }
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.2), lineWidth: 1))
+    }
+}
+
+struct MapMarkerView: View {
+    let marker: Game.MapMarker
+
+    var body: some View {
+        switch marker.kind {
+        case .you:
+            Image(systemName: "location.north.fill")
+                .font(.gameIcon(22, weight: .bold))
+                .foregroundStyle(.white)
+                .shadow(color: .black, radius: 2)
+                .rotationEffect(.radians(marker.heading))
+        case .friend(let color):
+            let c = Avatars.color(color)
+            VStack(spacing: 2) {
+                Circle()
+                    .fill(Color(red: Double(c.x), green: Double(c.y), blue: Double(c.z)))
+                    .overlay(Circle().stroke(.white, lineWidth: 2))
+                    .frame(width: UIMetrics.points(16), height: UIMetrics.points(16))
+                Text(marker.label)
+                    .font(.game(12).weight(.heavy))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black, radius: 2)
+                    .fixedSize()
+            }
+        case .pad:
+            icon("star.circle.fill", Color(red: 1, green: 0.82, blue: 0.25))
+        case .settlement:
+            VStack(spacing: 2) {
+                icon("building.2.crop.circle.fill", Color(red: 0.37, green: 0.94, blue: 1))
+                Text(marker.label)
+                    .font(.game(12).weight(.heavy))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black, radius: 2)
+                    .fixedSize()
+            }
+        case .vehicle:
+            icon("car.circle.fill", Color(red: 1, green: 0.55, blue: 0.85))
+        }
+    }
+
+    private func icon(_ name: String, _ color: Color) -> some View {
+        Image(systemName: name)
+            .font(.gameIcon(20, weight: .bold))
+            .foregroundStyle(.white, color)
+            .shadow(color: .black.opacity(0.6), radius: 2)
     }
 }
 
