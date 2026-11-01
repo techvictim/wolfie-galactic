@@ -23,6 +23,8 @@ final class GlitchState {
     var glowClock: Float = 0
     var glowTimer: Float = 0
     var humming = false
+    /// Nests checked at least once this session.
+    var seen: Set<String> = []
     /// Nests the builder bots are working on right now.
     var rebuilding: Set<String> = []
 

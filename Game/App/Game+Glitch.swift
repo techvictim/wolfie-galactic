@@ -118,11 +118,20 @@ extension Game {
                 for (site, nest) in glitch.nearby where simd_distance(nest.groundCenter, here) < 110 && !glitch.rebuilding.contains(nest.id) {
                     let total = glitchTotal(nest)
                     let left = glitchCount(nest, in: world)
+                    let first = !glitch.seen.contains(key(nest))
+                    glitch.seen.insert(key(nest))
                     if isCured(nest) {
                         // Cured but the blocks came back (the world wasn't saved): clean it up quietly.
                         if Float(left) > Float(total) * 0.5 { rebuild(nest, quick: true) }
                     } else if Float(left) <= Float(total) * (1 - Game.cureShare) {
-                        cure(nest, in: site)
+                        if first {
+                            // Already mostly clean when you got here: built before the Glitch came
+                            // (an older save) or wrecked earlier. It counts as cured, no fuss.
+                            glitch.setCured(nest.id, on: planet.id, true)
+                            cleanUp(nest)
+                        } else {
+                            cure(nest, in: site)
+                        }
                     }
                 }
             }
@@ -226,6 +235,17 @@ extension Game {
             self.glitch.rebuilding.remove(nest.id)
             self.show("Good as new!")
             self.save()
+        }
+    }
+
+    /// Turn any leftover Glitch blocks in a cured nest back to clean ones, without filling gaps.
+    private func cleanUp(_ nest: GlitchNest) {
+        for y in nest.min.y..<nest.max.y {
+            for z in nest.min.z..<nest.max.z {
+                for x in nest.min.x..<nest.max.x where GlitchNest.isGlitch(world.block(x, y, z)) {
+                    world.set(SIMD3(x, y, z), nest.clean(x, y, z) ?? B.air)
+                }
+            }
         }
     }
 

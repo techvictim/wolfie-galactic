@@ -16,13 +16,13 @@ struct CrewMember: Identifiable, Hashable {
 
 enum Crew {
     static let all: [CrewMember] = [
-        CrewMember(id: "wolfie", name: "Wolfie", role: "Boss of the crew. His nose can sniff out the Red Glitch.", scale: 1, jetZ: 4),
-        CrewMember(id: "gecko", name: "Gecko Kid", role: "Superhero who sticks to anything and climbs the tallest towers.", scale: 1, jetZ: 4),
-        CrewMember(id: "bubbles", name: "Bubbles", role: "Puffer-fish diver who giggles in bubbles.", scale: 1, jetZ: 4),
-        CrewMember(id: "nova", name: "Nova", role: "Space ranger. Keeps watch on the stars from the Space Dome.", scale: 1, jetZ: 4),
-        CrewMember(id: "gizmo", name: "Gizmo", role: "Tiny robot inventor with very big plans.", scale: 0.8, jetZ: 4),
-        CrewMember(id: "barnacle", name: "Captain Barnacle", role: "Old sea-turtle captain. Runs the boat dock.", scale: 1, jetZ: 6),
-        CrewMember(id: "thunderhoof", name: "Baron Thunderhoof", role: "Retired crash champion who loves a big crash.", scale: 1, jetZ: 4),
+        CrewMember(id: "wolfie", name: "Wolfie", role: "Commander, with the best nose in the galaxy: he can smell the Red Glitch (it smells like burnt toast).", scale: 1, jetZ: 4),
+        CrewMember(id: "gecko", name: "Gecko Kid", role: "Superhero who sticks to anything. Climbs Glitched towers to plant charges.", scale: 1, jetZ: 4),
+        CrewMember(id: "bubbles", name: "Bubbles", role: "Puffer-fish diver who giggles in bubbles and scouts for the Glitch.", scale: 1, jetZ: 4),
+        CrewMember(id: "nova", name: "Nova", role: "Space ranger. Tracks the Glitch from the stars and calls out new nests.", scale: 1, jetZ: 4),
+        CrewMember(id: "gizmo", name: "Gizmo", role: "Tiny robot inventor. Made the Red Glitch by accident, and he's sorry. Now he helps fix it!", scale: 0.8, jetZ: 4),
+        CrewMember(id: "barnacle", name: "Captain Barnacle", role: "Old sea-turtle captain who knows every corner of Wolfie World.", scale: 1, jetZ: 6),
+        CrewMember(id: "thunderhoof", name: "Baron Thunderhoof", role: "Retired crash champion. Joined up because now his crashing helps!", scale: 1, jetZ: 4),
     ]
 
     static func member(_ id: String?) -> CrewMember {
