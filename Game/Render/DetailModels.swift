@@ -15,8 +15,13 @@ struct VoxModel {
 enum VoxLoader {
     /// Reads the first model and the palette from a MagicaVoxel .vox file.
     static func load(_ data: Data) -> VoxModel? {
+        loadAll(data).first
+    }
+
+    /// Reads every model in the file (they share one palette), in the order they were saved.
+    static func loadAll(_ data: Data) -> [VoxModel] {
         let bytes = [UInt8](data)
-        guard bytes.count >= 20, String(bytes: bytes[0..<4], encoding: .ascii) == "VOX " else { return nil }
+        guard bytes.count >= 20, String(bytes: bytes[0..<4], encoding: .ascii) == "VOX " else { return [] }
 
         func u32(_ o: Int) -> Int {
             Int(bytes[o]) | (Int(bytes[o + 1]) << 8) | (Int(bytes[o + 2]) << 16) | (Int(bytes[o + 3]) << 24)
@@ -25,12 +30,11 @@ enum VoxLoader {
             String(bytes: bytes[o..<(o + 4)], encoding: .ascii) ?? ""
         }
 
-        guard tag(8) == "MAIN" else { return nil }
+        guard tag(8) == "MAIN" else { return [] }
         var offset = 8 + 12 + u32(12)
         var voxSize = SIMD3<Int>(0, 0, 0)
-        var raw: [(Int, Int, Int, UInt8)] = []
+        var models: [(size: SIMD3<Int>, raw: [(Int, Int, Int, UInt8)])] = []
         var palette = [SIMD3<Float>](repeating: SIMD3<Float>(0.7, 0.7, 0.7), count: 256)
-        var haveModel = false
 
         while offset + 12 <= bytes.count {
             let id = tag(offset)
@@ -40,17 +44,17 @@ enum VoxLoader {
             guard c + contentSize <= bytes.count else { break }
             switch id {
             case "SIZE":
-                if !haveModel { voxSize = SIMD3<Int>(u32(c), u32(c + 4), u32(c + 8)) }
+                voxSize = SIMD3<Int>(u32(c), u32(c + 4), u32(c + 8))
             case "XYZI":
-                if !haveModel {
-                    let count = u32(c)
-                    for i in 0..<count {
-                        let p = c + 4 + i * 4
-                        guard p + 3 < bytes.count else { break }
-                        raw.append((Int(bytes[p]), Int(bytes[p + 1]), Int(bytes[p + 2]), bytes[p + 3]))
-                    }
-                    haveModel = true
+                let count = u32(c)
+                var raw: [(Int, Int, Int, UInt8)] = []
+                raw.reserveCapacity(count)
+                for i in 0..<count {
+                    let p = c + 4 + i * 4
+                    guard p + 3 < bytes.count else { break }
+                    raw.append((Int(bytes[p]), Int(bytes[p + 1]), Int(bytes[p + 2]), bytes[p + 3]))
                 }
+                models.append((voxSize, raw))
             case "RGBA":
                 for i in 0..<255 {
                     let p = c + i * 4
@@ -61,14 +65,15 @@ enum VoxLoader {
             }
             offset = c + contentSize + childrenSize
         }
-        guard haveModel else { return nil }
 
         // MagicaVoxel uses z-up; the game uses y-up.
-        var voxels: [SIMD3<Int>: UInt8] = [:]
-        for (vx, vy, vz, color) in raw {
-            voxels[SIMD3<Int>(vx, vz, voxSize.y - 1 - vy)] = color
+        return models.map { model in
+            var voxels: [SIMD3<Int>: UInt8] = [:]
+            for (vx, vy, vz, color) in model.raw {
+                voxels[SIMD3<Int>(vx, vz, model.size.y - 1 - vy)] = color
+            }
+            return VoxModel(size: SIMD3<Int>(model.size.x, model.size.z, model.size.y), voxels: voxels, palette: palette)
         }
-        return VoxModel(size: SIMD3<Int>(voxSize.x, voxSize.z, voxSize.y), voxels: voxels, palette: palette)
     }
 }
 

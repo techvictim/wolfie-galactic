@@ -122,6 +122,18 @@ final class Game {
     /// The controls card, opened with the help button.
     var showHelp = false
 
+    // The crew (see Game+Crew.swift).
+    /// The highlighted character in the picker.
+    var crewIndex = 0
+    /// You, seen from behind.
+    @ObservationIgnored var me = CrewRig(GameSettings.shared.crew)
+    /// Where aiming starts: your eyes, or (seen from behind) the camera's line of sight level with you.
+    @ObservationIgnored var aimOrigin = SIMD3<Float>(repeating: 0)
+    /// The camera got pushed in so close (by a wall) that you'd be in the way.
+    @ObservationIgnored var cameraCrowded = false
+    @ObservationIgnored var lastMePosition: SIMD3<Float>?
+    @ObservationIgnored var recentBlasts: [Float] = []
+
     // Space (see Game+Space.swift).
     var place: Place = .surface
     /// Glowing hot while coming down through an atmosphere.
@@ -241,6 +253,8 @@ final class Game {
         sky.addChild(stars)
         sky.addChild(skyBodies)
         root.addChild(highlight)
+        root.addChild(me.root)
+        me.root.isEnabled = false
         root.addChild(avatars.root)
         root.addChild(critters.root)
         root.addChild(effects.root)
@@ -336,9 +350,37 @@ final class Game {
     }
 
     func syncCamera() {
-        camera.position = player.eye
+        let eye = player.eye
         camera.orientation = player.orientation
-        followCamera(player.eye)
+        guard GameSettings.shared.viewBehind else {
+            camera.position = eye
+            aimOrigin = eye
+            cameraCrowded = false
+            followCamera(eye)
+            return
+        }
+        // Behind and a little to the right, so you can see where you're aiming past your character.
+        let look = player.lookDirection
+        let right = player.orientation.act(SIMD3<Float>(1, 0, 0))
+        let wanted = eye + right * 0.55 + SIMD3<Float>(0, 0.25, 0) - look * 3.6
+        let path = wanted - eye
+        let length = simd_length(path)
+        var reach: Float = 1
+        // Walls and hills push the camera in.
+        var t: Float = 0.08
+        while t <= 1 {
+            let p = eye + path * t
+            if world.isSolidForPhysics(Int(floor(p.x)), Int(floor(p.y)), Int(floor(p.z))) {
+                reach = max(0, t - 0.3 / max(length, 0.01))
+                break
+            }
+            t += 0.1 / max(length, 0.01)
+        }
+        let cam = eye + path * reach
+        camera.position = cam
+        aimOrigin = cam + look * max(0, simd_dot(eye - cam, look))
+        cameraCrowded = length * reach < 1.1
+        followCamera(cam)
     }
 
     /// The sky and haze move with the camera.
@@ -377,6 +419,10 @@ final class Game {
             if messageTimer <= 0 { message = "" }
         }
 
+        if screen == .title || place != .surface || driving != nil || travelText != nil {
+            me.root.isEnabled = false
+            lastMePosition = nil
+        }
         if travelText != nil {
             hideLaser()
             return
@@ -399,6 +445,11 @@ final class Game {
             }
             hideLaser()
             updateMenu(frame)
+            return
+        case .crew:
+            if menuReturn == .title { orbitCamera(dt: dt) }
+            hideLaser()
+            updateCrewPicker(frame)
             return
         case .paused, .settings, .controls, .friends, .critterBook:
             if screen != .paused && menuReturn == .title { orbitCamera(dt: dt) }
@@ -485,11 +536,13 @@ final class Game {
         if let reachable, frame.openMap { board(reachable) }
 
         // A critter in front of the nearest block takes the laser, or a pat instead of building.
+        updateMe(dt: dt)
+        let behind = GameSettings.shared.viewBehind && !cameraCrowded
         let footAim = LaserAim(
-            origin: player.eye,
+            origin: aimOrigin,
             direction: player.lookDirection,
-            // Just below and to the right of the eye, like a blaster in your hand.
-            muzzle: player.eye + player.orientation.act(SIMD3<Float>(0.22, -0.2, -0.35))
+            // From the blaster in your character's hand, or just below and right of your eye.
+            muzzle: behind ? me.muzzle : player.eye + player.orientation.act(SIMD3<Float>(0.22, -0.2, -0.35))
         )
         let aimed = aimCritter(from: footAim)
         if laserSelected {
@@ -519,7 +572,7 @@ final class Game {
     }
 
     private func updateBuilding(_ frame: InputFrame, dt: Float) {
-        let target = raycast(world: world, origin: player.eye, direction: player.lookDirection, maxDistance: Player.reach)
+        let target = raycast(world: world, origin: aimOrigin, direction: player.lookDirection, maxDistance: Player.reach)
         if let target {
             highlight.isEnabled = true
             highlight.position = SIMD3<Float>(Float(target.block.x) + 0.5, Float(target.block.y) + 0.5, Float(target.block.z) + 0.5)
@@ -700,7 +753,7 @@ final class Game {
     // MARK: Title, pause and settings
 
     enum Screen {
-        case title, playing, paused, settings, controls, starMap, friends, critterBook, map, backpack
+        case title, playing, paused, settings, controls, starMap, friends, critterBook, map, backpack, crew
     }
 
     enum MenuItem: Hashable {
@@ -709,6 +762,7 @@ final class Game {
         case friends, hostGame, join(String), searching, yourName, yourColor
         case music, soundEffects, danger, critterBook, backpackMode
         case map, goTo(Int), goToPlace(String)
+        case crew, cameraView, voices
     }
 
     /// Where Back goes from Settings or Controls.
@@ -716,11 +770,11 @@ final class Game {
 
     var menuItems: [MenuItem] {
         switch screen {
-        case .title: return [.play, .friends, .controls, .settings]
+        case .title: return [.play, .crew, .friends, .controls, .settings]
         case .friends:
             let games: [MenuItem] = foundGames.isEmpty ? [.searching] : foundGames.map { .join($0.name) }
             return [.hostGame] + games + [.yourName, .yourColor, .back]
-        case .paused: return [.resume, .map, .critterBook, .controls, .settings, .quitToTitle]
+        case .paused: return [.resume, .map, .crew, .critterBook, .controls, .settings, .quitToTitle]
         case .map:
             var items: [MenuItem] = friendSpots.map { .goTo($0.id) }
             if place == .surface {
@@ -731,8 +785,8 @@ final class Game {
         case .controls, .critterBook: return [.back]
         case .settings:
             return menuReturn == .paused && session == .solo
-                ? [.danger, .backpackMode, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .speakNames, .restartPlanet, .back]
-                : [.danger, .backpackMode, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .speakNames, .back]
+                ? [.danger, .backpackMode, .cameraView, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .voices, .speakNames, .restartPlanet, .back]
+                : [.danger, .backpackMode, .cameraView, .lookSpeed, .invertLook, .viewDistance, .music, .soundEffects, .voices, .speakNames, .back]
         default: return []
         }
     }
@@ -782,6 +836,11 @@ final class Game {
             guard let site = nearestSettlement else { return ("Go", nil) }
             return ("Go to \(settlementName(site))", directions(to: SIMD2(Float(site.center.x), Float(site.center.y))))
         case .yourColor: return ("Your color", GameSettings.playerColorNames[min(max(settings.playerColor, 0), GameSettings.playerColorNames.count - 1)])
+        case .crew: return ("Character", Crew.member(settings.crew).name)
+        case .cameraView:
+            let name = Crew.member(settings.crew).name
+            return ("Camera", settings.viewBehind ? "Behind \(name)" : "\(name)'s eyes")
+        case .voices: return ("Voices", settings.voices ? "On" : "Off")
         }
     }
 
@@ -846,6 +905,11 @@ final class Game {
             dangerChanged()
         case .backpackMode:
             settings.freeBuild.toggle()
+        case .cameraView:
+            settings.viewBehind.toggle()
+        case .voices:
+            settings.voices.toggle()
+            if settings.voices { Voices.shared.say("hi", interrupt: true) }
         default:
             break
         }
@@ -925,6 +989,10 @@ final class Game {
             let settings = GameSettings.shared
             settings.musicLevel = (settings.musicLevel + 1) % 4
             Sound.shared.applyVolumes()
+        case .crew:
+            openCrewPicker()
+        case .cameraView, .voices:
+            adjust(item, by: 1)
         }
     }
 
@@ -943,6 +1011,8 @@ final class Game {
             menuIndex = menuItems.firstIndex(of: .friends) ?? 0
         case .paused:
             activate(.resume)
+        case .crew:
+            closeCrewPicker()
         default:
             break
         }

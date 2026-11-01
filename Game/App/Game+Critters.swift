@@ -60,6 +60,7 @@ extension Game {
             }
         } else {
             Sound.shared.play(kind.sound, at: aimed.point, listener: player.eye, facing: player.yaw, volume: 1, pitch: 1.1)
+            Voices.shared.say("laugh", chance: 0.25, cooldown: 10)
         }
     }
 
@@ -149,6 +150,7 @@ extension Game {
         regenTimer = 0
         hearts = max(0, hearts - amount)
         Sound.shared.play("hurt", volume: 0.8)
+        Voices.shared.say("hurt", chance: 0.6, cooldown: 7, volume: 0.5)
         hurtFlash = true
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 250_000_000)

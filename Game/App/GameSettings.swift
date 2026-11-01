@@ -48,6 +48,19 @@ final class GameSettings {
         didSet { UserDefaults.standard.set(danger, forKey: "danger") }
     }
 
+    /// Which crew member you play as: an id from Crew.all.
+    var crew: String {
+        didSet { UserDefaults.standard.set(crew, forKey: "crew") }
+    }
+    /// See your character from behind (true) or look through their eyes (false).
+    var viewBehind: Bool {
+        didSet { UserDefaults.standard.set(viewBehind, forKey: "viewBehind") }
+    }
+    /// Characters talk and laugh.
+    var voices: Bool {
+        didSet { UserDefaults.standard.set(voices, forKey: "voices") }
+    }
+
     /// 0 off … 3 high.
     var musicLevel: Int {
         didSet { UserDefaults.standard.set(musicLevel, forKey: "musicLevel") }
@@ -97,6 +110,9 @@ final class GameSettings {
         danger = defaults.object(forKey: "danger") as? Int ?? 1
         freeBuild = defaults.bool(forKey: "freeBuild")
         soundEffects = defaults.object(forKey: "soundEffects") as? Bool ?? true
+        crew = defaults.string(forKey: "crew") ?? "wolfie"
+        viewBehind = defaults.object(forKey: "viewBehind") as? Bool ?? true
+        voices = defaults.object(forKey: "voices") as? Bool ?? true
         let name = defaults.object(forKey: "playerName") as? Int ?? Int.random(in: 0..<GameSettings.playerNames.count)
         let color = defaults.object(forKey: "playerColor") as? Int ?? Int.random(in: 0..<GameSettings.playerColors.count)
         defaults.set(name, forKey: "playerName")

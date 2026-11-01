@@ -2,7 +2,7 @@ import Foundation
 import RealityKit
 import simd
 
-/// Friends in the world: a blocky space pup in their colour, with a laser when they fire.
+/// Friends in the world: the crew member they picked, with a laser when they fire.
 /// Their movement is smoothed, since updates arrive about 15 times a second.
 @MainActor
 final class Avatars {
@@ -10,8 +10,8 @@ final class Avatars {
 
     private struct Avatar {
         var card: PlayerCard
-        let body: Entity
-        let head: Entity
+        let rig: CrewRig
+        var body: Entity { rig.root }
         let beam: Entity
         var target: Pose?
         var shown: Pose?
@@ -39,13 +39,13 @@ final class Avatars {
 
     func add(_ card: PlayerCard) {
         remove(card.id)
-        let parts = Avatars.makeBody(color: Avatars.color(card.color))
+        let rig = CrewRig(card.crew ?? "wolfie")
         let beam = Avatars.makeBeam()
         beam.isEnabled = false
-        parts.body.isEnabled = false   // hidden until we know where they are
-        root.addChild(parts.body)
+        rig.root.isEnabled = false   // hidden until we know where they are
+        root.addChild(rig.root)
         root.addChild(beam)
-        avatars[card.id] = Avatar(card: card, body: parts.body, head: parts.head, beam: beam)
+        avatars[card.id] = Avatar(card: card, rig: rig, beam: beam)
     }
 
     func remove(_ id: Int) {
@@ -89,6 +89,7 @@ final class Avatars {
         for id in Array(avatars.keys) {
             guard var avatar = avatars[id], let target = avatar.target else { continue }
             var shown = avatar.shown ?? target
+            let before = shown.position
             // Far apart (just joined, or flew away fast): jump straight there.
             if simd_distance(shown.position, target.position) > 12 {
                 shown = target
@@ -135,14 +136,12 @@ final class Avatars {
             }
             avatar.body.position = shown.position
             avatar.body.orientation = simd_quatf(angle: shown.yaw, axis: SIMD3<Float>(0, 1, 0))
-            avatar.head.orientation = simd_quatf(angle: max(min(shown.pitch, 0.9), -0.9), axis: SIMD3<Float>(1, 0, 0))
-            // A little bob while flying.
-            if shown.flying {
-                avatar.body.position.y += sin(clock * 3 + Float(id)) * 0.06
-            }
+            let moved = shown.position - before
+            let speed = dt > 0 ? simd_length(SIMD2<Float>(moved.x, moved.z)) / dt : 0
+            avatar.rig.animate(dt: dt, speed: min(speed, 20), pitch: shown.pitch, flying: shown.flying, aiming: shown.laserEnd != nil)
 
             if let end = shown.laserEnd, !away {
-                let hand = avatar.body.convert(position: SIMD3<Float>(0.32, 1.1, -0.35), to: nil)
+                let hand = avatar.rig.muzzle
                 let span = end - hand
                 let length = simd_length(span)
                 if length > 0.05 {
@@ -169,44 +168,6 @@ final class Avatars {
 
     private static func material(_ c: SIMD3<Float>) -> UnlitMaterial {
         UnlitMaterial(color: PlatformColor(red: CGFloat(c.x), green: CGFloat(c.y), blue: CGFloat(c.z), alpha: 1))
-    }
-
-    private static func box(_ size: SIMD3<Float>, at center: SIMD3<Float>, _ c: SIMD3<Float>) -> ModelEntity {
-        let entity = ModelEntity(mesh: .generateBox(width: size.x, height: size.y, depth: size.z), materials: [material(c)])
-        entity.position = center
-        return entity
-    }
-
-    /// About as big as the player: 1.8 m with ears. Faces -z, like the camera.
-    private static func makeBody(color c: SIMD3<Float>) -> (body: Entity, head: Entity) {
-        let body = Entity()
-        let dark = c * 0.62
-        let suit = SIMD3<Float>(0.86, 0.88, 0.93)
-        let visor = SIMD3<Float>(0.08, 0.06, 0.18)
-
-        // Legs, body and arms: a white space suit with a coloured chest.
-        body.addChild(box(SIMD3(0.22, 0.7, 0.26), at: SIMD3(-0.13, 0.35, 0), dark))
-        body.addChild(box(SIMD3(0.22, 0.7, 0.26), at: SIMD3(0.13, 0.35, 0), dark))
-        body.addChild(box(SIMD3(0.56, 0.62, 0.32), at: SIMD3(0, 1.0, 0), suit))
-        body.addChild(box(SIMD3(0.36, 0.3, 0.02), at: SIMD3(0, 1.05, -0.17), c))
-        body.addChild(box(SIMD3(0.16, 0.56, 0.2), at: SIMD3(-0.37, 0.98, 0), suit))
-        body.addChild(box(SIMD3(0.16, 0.56, 0.2), at: SIMD3(0.37, 0.98, 0), suit))
-        // A little blaster in the right hand.
-        body.addChild(box(SIMD3(0.1, 0.1, 0.34), at: SIMD3(0.37, 0.72, -0.2), SIMD3(0.3, 0.3, 0.38)))
-
-        // The head tips up and down with where they look. It turns around the neck.
-        let head = Entity()
-        head.position = SIMD3(0, 1.36, 0)
-        head.addChild(box(SIMD3(0.5, 0.46, 0.5), at: SIMD3(0, 0.23, 0), c))
-        head.addChild(box(SIMD3(0.4, 0.16, 0.04), at: SIMD3(0, 0.26, -0.26), visor))        // visor band
-        head.addChild(box(SIMD3(0.07, 0.07, 0.02), at: SIMD3(-0.1, 0.27, -0.285), SIMD3(1, 0.72, 0.3)))  // eyes
-        head.addChild(box(SIMD3(0.07, 0.07, 0.02), at: SIMD3(0.1, 0.27, -0.285), SIMD3(1, 0.72, 0.3)))
-        head.addChild(box(SIMD3(0.2, 0.12, 0.14), at: SIMD3(0, 0.1, -0.31), c * 0.85))       // snout
-        head.addChild(box(SIMD3(0.07, 0.05, 0.03), at: SIMD3(0, 0.15, -0.385), visor))       // nose
-        head.addChild(box(SIMD3(0.13, 0.2, 0.1), at: SIMD3(-0.16, 0.55, 0), dark))           // ears
-        head.addChild(box(SIMD3(0.13, 0.2, 0.1), at: SIMD3(0.16, 0.55, 0), dark))
-        body.addChild(head)
-        return (body, head)
     }
 
     private static func makeBeam() -> Entity {

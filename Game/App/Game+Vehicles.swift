@@ -131,6 +131,7 @@ extension Game {
         player.position = v.position
         shareVehicle(v, on: planet.id, driver: myID)
         Sound.shared.play("vehicle-in", volume: 0.8)
+        Voices.shared.say("ride", cooldown: 8)
         Sound.shared.startLoop(kind.engineSound, channel: "engine", volume: 0.15, pitch: 0.8)
         if kind.isShip && kind != .starship { show("Flying the \(kind.name)") }
     }
@@ -256,6 +257,7 @@ extension Game {
                 self.zapCritter(critter)
             } else if let block, block.y > 0, self.world.block(block) != B.air {
                 self.blastBlock(block)
+                self.noteBigBlast()
             } else {
                 self.effects.spark(at: end)
             }
@@ -269,6 +271,7 @@ extension Game {
         changeBlock(block, B.air)
         let center = SIMD3<Float>(Float(block.x) + 0.5, Float(block.y) + 0.5, Float(block.z) + 0.5)
         dropPickup(id, at: center)
+        noteBlockBlasted()
         effects.blockBurst(at: center, blockColor: BlockRegistry.shared.rgb(id))
         let distance = simd_distance(center, camera.position)
         Sound.shared.playVaried("explode", volume: (loud ? 0.7 : 0.35) * max(0.25, min(1, 14 / max(distance, 1))), spread: 0.12)

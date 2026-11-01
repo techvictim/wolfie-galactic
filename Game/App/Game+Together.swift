@@ -31,7 +31,15 @@ struct FriendSpot: Identifiable, Equatable {
 extension Game {
     private var myCard: PlayerCard {
         let settings = GameSettings.shared
-        return PlayerCard(id: myID, name: settings.playerNameText, color: settings.playerColor)
+        return PlayerCard(id: myID, name: settings.playerNameText, color: settings.playerColor, crew: settings.crew)
+    }
+
+    /// Your character says hi to a friend, once the name has been read out.
+    func sayHiSoon() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            Voices.shared.say("hi", cooldown: 10)
+        }
     }
 
     /// Where you are: the planet you're on, or the one you're orbiting in space.
@@ -275,12 +283,12 @@ extension Game {
     private func hostReceived(_ message: NetMessage, from id: Int) {
         guard session == .hosting, let host else { return }
         switch message {
-        case let .hello(version, name, color):
+        case let .hello(version, name, color, crew):
             guard version == Net.version else {
                 host.send(.refused(reason: "Update Wolfie Galactic on both devices to play together"), to: id)
                 return
             }
-            let card = PlayerCard(id: id, name: name, color: color)
+            let card = PlayerCard(id: id, name: name, color: color, crew: crew)
             let edits = (try? world.compressedEdits()) ?? [:]
             host.send(.welcome(you: id, planet: planet.id, edits: edits, vehicles: notes(for: planet.id), players: [myCard] + avatars.cards), to: id)
             host.broadcast(.joined(card), except: id)
@@ -294,6 +302,7 @@ extension Game {
             show("\(name) joined")
             Speaker.shared.say("\(name) joined")
             Sound.shared.play("friend-joined")
+            sayHiSoon()
         case let .pose(_, pose):
             avatars.setPose(id, pose)
             host.broadcast(.pose(id: id, pose: pose), except: id)
@@ -341,7 +350,7 @@ extension Game {
         let link = PeerLink(connection: NWConnection(to: game.endpoint, using: PeerLink.parameters()))
         let settings = GameSettings.shared
         link.onReady = { [weak link] in
-            link?.send(.hello(version: Net.version, name: settings.playerNameText, color: settings.playerColor))
+            link?.send(.hello(version: Net.version, name: settings.playerNameText, color: settings.playerColor, crew: settings.crew))
         }
         link.onMessage = { [weak self] message in self?.clientReceived(message) }
         link.onClose = { [weak self] in self?.lostHost(name: name) }
@@ -400,6 +409,7 @@ extension Game {
             players = avatars.cards
             show("\(card.name) joined")
             Sound.shared.play("friend-joined")
+            sayHiSoon()
         case let .left(id):
             if let card = avatars.card(id) { show("\(card.name) left") }
             avatars.remove(id)

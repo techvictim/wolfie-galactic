@@ -64,6 +64,11 @@ struct GameView: View {
                     .transition(.opacity)
             }
 
+            if game.screen == .crew {
+                CrewPicker(game: game)
+                    .transition(.opacity)
+            }
+
             if game.screen == .map {
                 MapScreen(game: game)
                     .transition(.opacity)

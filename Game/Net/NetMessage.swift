@@ -7,7 +7,7 @@ enum Net {
     /// Bonjour name the host advertises. Also listed in Info.plist (NSBonjourServices).
     static let serviceType = "_wolfiegalactic._tcp"
     /// Bump when messages change, so old and new versions don't try to play together.
-    static let version = 3
+    static let version = 4
     /// How often each player sends where they are.
     static let poseInterval: Float = 1.0 / 15
     /// The host's player id. Friends get 1, 2, 3…
@@ -19,6 +19,8 @@ struct PlayerCard: Codable, Hashable, Sendable {
     let id: Int
     let name: String
     let color: Int
+    /// Which crew member they play as.
+    var crew: String?
 }
 
 /// Where someone is and what they're doing.
@@ -63,7 +65,7 @@ struct VehicleNote: Codable, Sendable, Equatable {
 
 enum NetMessage: Codable, Sendable {
     /// Friend → host, first thing after connecting.
-    case hello(version: Int, name: String, color: Int)
+    case hello(version: Int, name: String, color: Int, crew: String?)
     /// Host → friend: your id, the host's planet with every changed chunk and vehicle, and who's here.
     case welcome(you: Int, planet: String, edits: [String: Data], vehicles: [VehicleNote], players: [PlayerCard])
     /// Host → friend: you can't join, and why.

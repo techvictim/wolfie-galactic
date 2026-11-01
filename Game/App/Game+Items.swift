@@ -84,6 +84,7 @@ extension Game {
         for (need, n) in recipe.needs { take(need, n) }
         add(item, recipe.count)
         Sound.shared.play("craft", volume: 0.8)
+        Voices.shared.say("up", chance: 0.5, cooldown: 15)
         show("Made \(recipe.count) \(catalog.name(item))!")
         return true
     }
@@ -331,6 +332,7 @@ extension Game {
                 jumpPadClock = critterClock
                 machineCooldown = 0.3
                 Sound.shared.play("boing", volume: 0.8)
+                Voices.shared.say("chute", chance: 0.6, cooldown: 10)
             case .speedPad:
                 let forward = SIMD3<Float>(-sin(player.yaw), 0, -cos(player.yaw))
                 player.knock(forward * 26 + SIMD3<Float>(0, 4, 0))
