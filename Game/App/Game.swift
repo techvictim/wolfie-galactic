@@ -133,6 +133,8 @@ final class Game {
     @ObservationIgnored var cameraCrowded = false
     @ObservationIgnored var lastMePosition: SIMD3<Float>?
     @ObservationIgnored var recentBlasts: [Float] = []
+    /// Weapons (see Game+Weapons.swift).
+    @ObservationIgnored let armory = Armory()
 
     // Space (see Game+Space.swift).
     var place: Place = .surface
@@ -258,6 +260,7 @@ final class Game {
         root.addChild(avatars.root)
         root.addChild(critters.root)
         root.addChild(effects.root)
+        root.addChild(armory.root)
         root.addChild(pickups.root)
         root.addChild(ghost)
         root.addChild(space.root)
@@ -299,6 +302,7 @@ final class Game {
         renderer.reset(world: world)
         critters.reset(planet: planet.id)
         effects.clear()
+        armory.clear()
         pickups.clear()
         flying = player.flying
 
@@ -410,6 +414,9 @@ final class Game {
         updateTogether(dt: dt)
         updateMusic()
         effects.update(dt: dt)
+        if screen == .playing && place == .surface && travelText == nil {
+            updateArmory(dt: dt)
+        }
         if frame.help && (screen == .playing || screen == .starMap) {
             showHelp.toggle()
             Sound.shared.play("menu-move")
@@ -537,6 +544,7 @@ final class Game {
 
         // A critter in front of the nearest block takes the laser, or a pat instead of building.
         updateMe(dt: dt)
+        shakeCamera()
         let behind = GameSettings.shared.viewBehind && !cameraCrowded
         let footAim = LaserAim(
             origin: aimOrigin,
@@ -545,7 +553,10 @@ final class Game {
             muzzle: behind ? me.muzzle : player.eye + player.orientation.act(SIMD3<Float>(0.22, -0.2, -0.35))
         )
         let aimed = aimCritter(from: footAim)
-        if laserSelected {
+        if let weapon = heldWeapon {
+            hideLaser()
+            updateWeapon(weapon, frame: frame, dt: dt, aim: footAim, critter: aimed)
+        } else if laserSelected {
             highlight.isEnabled = false
             ghost.isEnabled = false
             updateLaser(firing: frame.breakHeld, dt: dt, critter: aimed, aim: footAim)
@@ -921,6 +932,10 @@ final class Game {
         case .play, .resume:
             screen = .playing
             syncCamera()
+            if !UserDefaults.standard.bool(forKey: "seenWeapons") {
+                UserDefaults.standard.set(true, forKey: "seenWeapons")
+                show("New! Wolfie Military weapons are in your backpack. Press \(keyboardMode ? "I" : "X")")
+            }
             #if os(macOS)
             input.capturePointer()
             #endif
@@ -1099,6 +1114,7 @@ final class Game {
     func selectSlot(_ index: Int) {
         guard index != hotbarIndex, hotbar.indices.contains(index) else { return }
         hotbarIndex = index
+        holsterWeapon()
         Sound.shared.play("hotbar")
         Speaker.shared.say(ItemCatalog.shared.name(hotbar[index]))
     }

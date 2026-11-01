@@ -253,6 +253,94 @@ def make_vehicles():
     save_sfx("teleport", mix(sweep(300, 2400, 0.35, "sine", 1.5) * env(int(0.35 * SR), 0.01, 0.2), delay(mix(*[delay(bell(f, 0.3, 1.5) * 0.4, 0.04 * k) for k, f in enumerate([1568, 2093, 2637, 3136])]), 0.2)), 0.6)
 
 
+# ---------- weapons ----------
+
+def boom(seconds, low=900, thud_from=110, thud_to=36, crackle=0.5, tail=0.35):
+    """An explosion: a noise blast, a falling thud, crackle on top and a rumbling tail."""
+    n = int(seconds * SR)
+    blast = lowpass(noise(seconds), low, 3) * env(n, 0.002, tail * seconds * 2)
+    thud = sweep(thud_from, thud_to, seconds, "sine", 0.4) * env(n, 0.002, seconds * 0.6)
+    crack = bandpass(noise(min(seconds, 0.4)), 1500, 7000) * env(int(min(seconds, 0.4) * SR), 0.001, 0.12)
+    return mix(blast * 1.2, thud * 1.1, crack * crackle)
+
+def gunshot(seconds, body=1200, snap=0.6, thump=120):
+    n = int(seconds * SR)
+    crack = bandpass(noise(seconds), 800, 6000) * env(n, 0.0005, seconds * 0.4)
+    low = lowpass(noise(seconds), body) * env(n, 0.001, seconds * 0.6)
+    punch = sweep(thump, thump * 0.4, seconds, "sine", 0.4) * env(n, 0.001, seconds * 0.5)
+    return mix(crack * snap, low, punch * 0.8)
+
+def make_weapons():
+    # Hand tools.
+    save_sfx("hammer", mix(lowpass(noise(0.18), 1400) * env(int(0.18 * SR), 0.001, 0.07), sweep(180, 70, 0.18) * env(int(0.18 * SR), 0.001, 0.12)), 0.8)
+    save_sfx("sledge", mix(lowpass(noise(0.32), 900) * env(int(0.32 * SR), 0.001, 0.14), sweep(120, 40, 0.32) * env(int(0.32 * SR), 0.001, 0.22), bell(220, 0.4, 3) * 0.15), 0.85)
+    t = t_of(1.0)
+    roar = bandpass(noise(1.0), 250, 3500) * (0.8 + 0.2 * np.sin(2 * np.pi * 9 * t)) + lowpass(noise(1.0), 300) * 0.6
+    wavfile.write(os.path.join(OUT, "flame-loop.wav"), SR, (normalize(loop_crossfade(roar, 0.15), 0.55) * 32767).astype(np.int16))
+
+    # Guns.
+    save_sfx("gun-mini", gunshot(0.07, 1600, 0.7, 160), 0.6)
+    save_sfx("gun-heavy", gunshot(0.16, 900, 0.7, 90), 0.75)
+    sniper = mix(gunshot(0.25, 1400, 1.0, 110), delay(lowpass(noise(0.9), 700) * env(int(0.9 * SR), 0.05, 0.6) * 0.35, 0.12))
+    save_sfx("gun-sniper", sniper, 0.85)
+    save_sfx("gun-rifle", mix(gunshot(0.22, 1200, 0.9, 100), delay(lowpass(noise(0.5), 600) * env(int(0.5 * SR), 0.03, 0.3) * 0.25, 0.1)), 0.8)
+    pump = mix(delay(bandpass(noise(0.05), 1500, 5000) * env(int(0.05 * SR), 0.001, 0.02), 0.32), delay(bandpass(noise(0.06), 1000, 4000) * env(int(0.06 * SR), 0.001, 0.03), 0.42))
+    save_sfx("shotgun", mix(gunshot(0.3, 800, 0.8, 80), pump * 0.4), 0.85)
+
+    # Launchers and throwing.
+    save_sfx("cannon", mix(boom(0.6, 500, 90, 30, 0.2, 0.25), lowpass(noise(0.08), 3000) * env(int(0.08 * SR), 0.001, 0.03)), 0.85)
+    whoosh = bandpass(noise(0.7), 600, 6000) * np.sin(np.linspace(0, np.pi, int(0.7 * SR))) ** 0.6 * np.linspace(1, 0.3, int(0.7 * SR))
+    save_sfx("rocket", mix(lowpass(noise(0.12), 1500) * env(int(0.12 * SR), 0.001, 0.05), whoosh * 0.9, sweep(300, 900, 0.7, "saw", 0.6) * env(int(0.7 * SR), 0.01, 0.4) * 0.12), 0.75)
+    save_sfx("throw", bandpass(noise(0.25), 400, 3000) * np.sin(np.linspace(0, np.pi, int(0.25 * SR))) ** 2, 0.5)
+    save_sfx("gl", mix(sweep(260, 120, 0.12) * env(int(0.12 * SR), 0.001, 0.08), lowpass(noise(0.1), 1200) * env(int(0.1 * SR), 0.001, 0.05)), 0.7)
+    save_sfx("mortar", mix(sweep(150, 60, 0.3) * env(int(0.3 * SR), 0.001, 0.2), lowpass(noise(0.25), 900) * env(int(0.25 * SR), 0.001, 0.12), delay(bandpass(noise(0.4), 800, 4000) * env(int(0.4 * SR), 0.05, 0.3) * 0.3, 0.1)), 0.8)
+    save_sfx("bounce", mix(bell(1900, 0.12, 1.5) * 0.6, bandpass(noise(0.03), 2000, 6000) * env(int(0.03 * SR), 0.0005, 0.015)), 0.4)
+    save_sfx("stick", mix(lowpass(noise(0.08), 700) * env(int(0.08 * SR), 0.001, 0.04), sweep(400, 200, 0.08, "tri") * env(int(0.08 * SR), 0.001, 0.05)), 0.55)
+    save_sfx("beep", sweep(1760, 1760, 0.07, "square") * env(int(0.07 * SR), 0.002, 0.03), 0.3)
+
+    # Booms, from a pop to the nuke.
+    save_sfx("boom-big", boom(1.1, 700, 90, 28, 0.45, 0.4), 0.9)
+    huge = mix(boom(2.0, 500, 70, 22, 0.35, 0.45), delay(lowpass(noise(1.6), 250, 3) * env(int(1.6 * SR), 0.1, 1.0) * 0.8, 0.2))
+    save_sfx("boom-huge", huge, 0.92)
+    n = 6.0
+    nuke = mix(boom(1.4, 400, 60, 20, 0.3, 0.5),
+               delay(lowpass(noise(n), 160, 3) * env(int(n * SR), 0.3, 3.5) * 1.4, 0.3),
+               delay(lowpass(noise(3.0), 600) * env(int(3.0 * SR), 0.6, 1.8) * 0.5, 1.0))
+    save_sfx("nuke", nuke, 0.95)
+    # A falling bomb: an air-rush shriek that drops in pitch, not a pure tone.
+    n = 1.6
+    shriek = bandpass(noise(n), 1200, 2600) * 0.6 + sweep(1500, 700, n, "sine", 1.2) * 0.25
+    save_sfx("whistle", lowpass(shriek, 4000) * np.linspace(0.2, 1, int(n * SR)) * env(int(n * SR), 0.2, 0.1, hold=1.2), 0.5)
+
+    # Air strikes.
+    n = 3.0
+    jet = bandpass(noise(n), 300, 5000) * np.sin(np.linspace(0, np.pi, int(n * SR))) ** 2
+    jet_tone = sweep(900, 500, n, "saw", 1) * np.sin(np.linspace(0, np.pi, int(n * SR))) ** 3 * 0.12
+    save_sfx("jet", mix(jet, lowpass(jet_tone, 2500)), 0.75)
+    n = 4.5
+    drone_hum = (sweep(70, 62, n, "saw") * 0.5 + sweep(105, 93, n, "saw") * 0.3) * np.sin(np.linspace(0, np.pi, int(n * SR))) ** 1.5
+    save_sfx("bomber", mix(lowpass(drone_hum, 600), bandpass(noise(n), 200, 1500) * np.sin(np.linspace(0, np.pi, int(n * SR))) ** 2 * 0.4), 0.75)
+    save_sfx("gunship", mix(lowpass(sweep(85, 85, 2.5, "saw"), 500) * env(int(2.5 * SR), 0.4, 0.8, hold=1.2), bandpass(noise(2.5), 300, 2000) * env(int(2.5 * SR), 0.4, 0.8, hold=1.2) * 0.4), 0.6)
+    t = t_of(0.8)
+    save_sfx("drone", lowpass(sweep(220, 260, 0.8, "saw") * (1 + 0.3 * np.sin(2 * np.pi * 30 * t)), 2500) * env(int(0.8 * SR), 0.05, 0.3), 0.4)
+    radio = mix(bandpass(noise(0.12), 1000, 4000) * env(int(0.12 * SR), 0.001, 0.05) * 0.4,
+                delay(sweep(1200, 1200, 0.08, "square") * env(int(0.08 * SR), 0.002, 0.03), 0.12),
+                delay(sweep(1600, 1600, 0.1, "square") * env(int(0.1 * SR), 0.002, 0.04), 0.24))
+    save_sfx("radio", lowpass(radio, 3500), 0.45)
+
+    # Black hole: a sparkle that opens it, a deep wobbling hum with rushing wind, then a falling
+    # "vwoomp" and a bright echoing chime when it snaps shut.
+    save_sfx("blackhole-open", mix(sweep(200, 1800, 0.5, "sine", 1.5) * env(int(0.5 * SR), 0.01, 0.3),
+                                   delay(mix(*[delay(bell(f, 0.4, 2) * 0.3, 0.05 * k) for k, f in enumerate([1319, 1760, 2349])]), 0.2)), 0.6)
+    t = t_of(2.0)
+    hum = (np.sin(2 * np.pi * 45 * t) * 0.6 + np.sin(2 * np.pi * 67.5 * t) * 0.3) * (1 + 0.4 * np.sin(2 * np.pi * 3 * t))
+    wind = bandpass(noise(2.0), 300, 2500) * (0.7 + 0.3 * np.sin(2 * np.pi * 1.5 * t))
+    wavfile.write(os.path.join(OUT, "blackhole-loop.wav"), SR, (normalize(loop_crossfade(hum + wind * 0.5, 0.3), 0.6) * 32767).astype(np.int16))
+    vwoomp = sweep(900, 50, 0.6, "sine", 0.5) * env(int(0.6 * SR), 0.005, 0.4)
+    chime = mix(*[delay(bell(f, 1.2, 2) * (0.5 ** k), 0.18 * k) for k, f in enumerate([2093, 2093, 2093, 2093])])
+    save_sfx("blackhole-close", mix(lowpass(vwoomp, 2000), delay(chime * 0.7, 0.4)), 0.8)
+
+
 # ---------- music ----------
 
 NOTE = {n: i for i, n in enumerate(["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"])}
@@ -369,6 +457,7 @@ if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     make_effects()
     make_vehicles()
+    make_weapons()
     print("Effects done.")
     make_music()
     print(f"Wrote everything to {OUT}")

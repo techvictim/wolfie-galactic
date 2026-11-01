@@ -28,7 +28,7 @@ extension Game {
 
     /// The critter in front of you, if it's nearer than the nearest block.
     func aimCritter(from aim: LaserAim) -> AimedCritter? {
-        let reach = (laserSelected || driving != nil) ? Player.laserRange : Player.reach
+        let reach = heldWeapon.map { min($0.range, 80) } ?? ((laserSelected || driving != nil) ? Player.laserRange : Player.reach)
         let direction = aim.direction
         guard let hit = critters.target(origin: aim.origin, direction: direction, maxDistance: reach) else { return nil }
         if let block = raycast(world: world, origin: aim.origin, direction: direction, maxDistance: reach) {

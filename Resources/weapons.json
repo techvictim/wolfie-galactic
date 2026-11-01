@@ -1,0 +1,40 @@
+{
+  "_help": "The Wolfie Military arsenal. Change any number and rebuild. type: melee, flame, gun, projectile, sticky, mine, strike or blackhole. cooldown is seconds between shots; hold lets you keep the trigger down. radius is the size of the boom in blocks. speed is metres a second; gravity pulls shots down (20 is about normal). pierce is how many blocks a shot goes through. fuse is seconds before it blows (0 = when it hits). look is how a shot looks: ball, rocket, grenade, shell, charge, mine, bomb, meteor or drone. strike styles: artillery, jets, bomber, gunship, cruise, missiles, drones, meteors, mega, nuke. hand is what your character holds: tool, gun, launcher, charge, radio or alien.",
+  "weapons": [
+    { "id": "hammer", "name": "Hammer", "group": "Hand tools", "about": "Whack anything up close", "type": "melee", "cooldown": 0.28, "hold": true, "range": 4, "radius": 0.6, "hand": "tool", "sound": "hammer" },
+    { "id": "sledge", "name": "Sledge", "group": "Hand tools", "about": "A giant hammer for a bigger smash", "type": "melee", "cooldown": 0.6, "hold": true, "range": 4.5, "radius": 1.8, "hand": "tool", "sound": "sledge" },
+    { "id": "flame", "name": "Flamer", "group": "Hand tools", "about": "Hold to blast a river of fire. Blocks burn and crumble", "type": "flame", "cooldown": 0.14, "hold": true, "range": 9, "hand": "gun" },
+
+    { "id": "minigun", "name": "Minigun", "group": "Guns", "about": "Hold to spray bullets", "type": "gun", "cooldown": 0.07, "hold": true, "range": 60, "pierce": 1, "spread": 0.035, "hand": "gun", "sound": "gun-mini" },
+    { "id": "hmg", "name": ".50 Cal", "group": "Guns", "about": "Heavy machine gun, big holes", "type": "gun", "cooldown": 0.11, "hold": true, "range": 80, "pierce": 2, "spread": 0.02, "hand": "gun", "sound": "gun-heavy" },
+    { "id": "scope", "name": "Sniper", "group": "Guns", "about": "Hold LT to zoom with the scope. One shot goes through 20 blocks", "type": "gun", "cooldown": 1.1, "range": 220, "pierce": 20, "zoom": 4, "hand": "gun", "sound": "gun-sniper" },
+    { "id": "sniper", "name": "Big Rifle", "group": "Guns", "about": "Each shot punches through 8 blocks", "type": "gun", "cooldown": 0.9, "range": 140, "pierce": 8, "hand": "gun", "sound": "gun-rifle" },
+    { "id": "shotgun", "name": "Shotgun", "group": "Guns", "about": "A wide blast up close", "type": "gun", "cooldown": 0.7, "hold": true, "range": 22, "pierce": 1, "pellets": 9, "spread": 0.09, "hand": "gun", "sound": "shotgun" },
+
+    { "id": "cannon", "name": "Cannon", "group": "Launchers", "about": "Heavy ball smashes right through", "type": "projectile", "cooldown": 0.5, "hold": true, "speed": 45, "gravity": 6, "pierce": 7, "radius": 1.6, "look": "ball", "hand": "launcher", "sound": "cannon" },
+    { "id": "rocket", "name": "Rocket", "group": "Launchers", "about": "Fast rocket, big boom", "type": "projectile", "cooldown": 0.55, "hold": true, "speed": 55, "radius": 3, "look": "rocket", "hand": "launcher", "sound": "rocket" },
+    { "id": "bazooka", "name": "Bazooka", "group": "Launchers", "about": "Big shoulder rocket, bigger boom", "type": "projectile", "cooldown": 0.9, "speed": 42, "radius": 4.5, "look": "rocket", "size": 1.6, "hand": "launcher", "sound": "rocket" },
+    { "id": "grenade", "name": "Grenade", "group": "Launchers", "about": "Bouncy, blows up after 2 seconds", "type": "projectile", "cooldown": 0.4, "hold": true, "speed": 18, "gravity": 20, "bounce": true, "fuse": 2, "radius": 2.8, "look": "grenade", "hand": "charge", "sound": "throw" },
+    { "id": "gl", "name": "Grenades", "group": "Launchers", "about": "Hold to lob grenades fast", "type": "projectile", "cooldown": 0.28, "hold": true, "speed": 26, "gravity": 20, "bounce": true, "fuse": 1.4, "radius": 2.4, "look": "grenade", "hand": "launcher", "sound": "gl" },
+    { "id": "mortar", "name": "Mortar", "group": "Launchers", "about": "Lobs a shell high over walls", "type": "projectile", "cooldown": 1.1, "speed": 34, "gravity": 20, "lob": 0.9, "radius": 3.6, "look": "shell", "hand": "launcher", "sound": "mortar" },
+    { "id": "buster", "name": "Buster", "group": "Launchers", "about": "Drills deep inside, then explodes", "type": "projectile", "cooldown": 1.4, "speed": 40, "drill": 7, "radius": 4.2, "look": "rocket", "hand": "launcher", "sound": "rocket" },
+
+    { "id": "tnt", "name": "TNT", "group": "Explosives", "about": "Sticks on, blows on a timer", "type": "sticky", "cooldown": 0.25, "speed": 14, "gravity": 20, "fuse": 3, "radius": 3.4, "look": "charge", "hand": "charge", "sound": "throw" },
+    { "id": "remote", "name": "Remote", "group": "Explosives", "about": "Stick lots, then press LT to set them all off", "type": "sticky", "cooldown": 0.2, "speed": 14, "gravity": 20, "remote": true, "radius": 3, "look": "charge", "hand": "charge", "sound": "throw" },
+    { "id": "cluster", "name": "Cluster", "group": "Explosives", "about": "Bursts into 8 little bombs", "type": "projectile", "cooldown": 0.8, "speed": 20, "gravity": 20, "fuse": 1.2, "radius": 1.6, "count": 8, "look": "grenade", "hand": "charge", "sound": "throw" },
+    { "id": "mines", "name": "Mines", "group": "Explosives", "about": "Critters and vehicles set them off", "type": "mine", "cooldown": 0.3, "speed": 10, "gravity": 20, "radius": 3, "look": "mine", "hand": "charge", "sound": "throw" },
+
+    { "id": "artillery", "name": "Artillery", "group": "Air strikes", "about": "Big guns far away fire 8 shells", "type": "strike", "style": "artillery", "cooldown": 4, "count": 8, "radius": 3, "spread": 7, "hand": "radio" },
+    { "id": "air", "name": "Jets", "group": "Air strikes", "about": "A jet drops a row of bombs", "type": "strike", "style": "jets", "cooldown": 3.5, "count": 7, "radius": 3, "spread": 28, "hand": "radio" },
+    { "id": "bomber", "name": "Bomber", "group": "Air strikes", "about": "A giant bomber carpet-bombs a long strip", "type": "strike", "style": "bomber", "cooldown": 7, "count": 16, "radius": 3.2, "spread": 60, "hand": "radio" },
+    { "id": "gunship", "name": "Gunship", "group": "Air strikes", "about": "A big ship circles and blasts the target", "type": "strike", "style": "gunship", "cooldown": 12, "count": 32, "radius": 1.8, "spread": 9, "hand": "radio" },
+    { "id": "cruise", "name": "Cruise", "group": "Air strikes", "about": "Flies in low, then one huge boom", "type": "strike", "style": "cruise", "cooldown": 5, "count": 1, "radius": 7, "hand": "radio" },
+    { "id": "missiles", "name": "Missiles", "group": "Air strikes", "about": "Six missiles rain down on the target", "type": "strike", "style": "missiles", "cooldown": 4, "count": 6, "radius": 3.2, "spread": 6, "hand": "radio" },
+    { "id": "drones", "name": "Drones", "group": "Air strikes", "about": "Five little drones zoom in and pop", "type": "strike", "style": "drones", "cooldown": 3, "count": 5, "radius": 2.2, "spread": 5, "hand": "radio" },
+    { "id": "meteor", "name": "Meteors", "group": "Air strikes", "about": "Flaming space rocks fall from the sky", "type": "strike", "style": "meteors", "cooldown": 5, "count": 7, "radius": 3.6, "spread": 10, "hand": "radio" },
+    { "id": "mega", "name": "Mega", "group": "Air strikes", "about": "A giant bomb", "type": "strike", "style": "mega", "cooldown": 4.5, "count": 1, "radius": 7.5, "hand": "radio" },
+    { "id": "nuke", "name": "Nuke", "group": "Air strikes", "about": "The biggest boom in the game, with a mushroom cloud!", "type": "strike", "style": "nuke", "cooldown": 20, "count": 1, "radius": 15, "hand": "radio" },
+
+    { "id": "blackhole", "name": "Black Hole", "group": "Alien tech", "about": "Opens a black hole that swallows everything nearby. Recharges in 30 seconds", "type": "blackhole", "cooldown": 0.6, "recharge": 30, "radius": 10, "duration": 5, "hand": "alien" }
+  ]
+}

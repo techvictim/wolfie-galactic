@@ -7,7 +7,7 @@ enum Net {
     /// Bonjour name the host advertises. Also listed in Info.plist (NSBonjourServices).
     static let serviceType = "_wolfiegalactic._tcp"
     /// Bump when messages change, so old and new versions don't try to play together.
-    static let version = 4
+    static let version = 5
     /// How often each player sends where they are.
     static let poseInterval: Float = 1.0 / 15
     /// The host's player id. Friends get 1, 2, 3…
@@ -75,6 +75,8 @@ enum NetMessage: Codable, Sendable {
     case pose(id: Int, pose: Pose)
     /// A block changed on a planet.
     case block(planet: String, x: Int, y: Int, z: Int, id: UInt8)
+    /// A ball of blocks blown away (explosions, black holes). Everyone carves the same blocks.
+    case blast(planet: String, x: Float, y: Float, z: Float, radius: Float)
     /// Friend → host: I'm going to this planet; please send it.
     case askPlanet(planet: String)
     /// Host → friend: a planet's changed chunks and vehicles.

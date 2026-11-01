@@ -98,6 +98,8 @@ final class CrewRig {
 
     private var phase: Float = 0
     private var flameClock: Float = 0
+    private var heldStyle: String?
+    private var swingTime: Float = 0
 
     init(_ id: String) {
         member = Crew.member(id)
@@ -130,13 +132,60 @@ final class CrewRig {
         flames.isEnabled = false
         body.addChild(flames)
 
-        // The blaster sits in the right hand when the laser is out.
-        blaster.addChild(CrewRig.box(SIMD3(0.09, 0.11, 0.3), at: SIMD3(0, 0, -0.08), SIMD3(0.24, 0.27, 0.33), opacity: 1))
-        blaster.addChild(CrewRig.box(SIMD3(0.05, 0.05, 0.06), at: SIMD3(0, 0.01, -0.26), SIMD3(1, 0.45, 0.85), opacity: 1))
+        // Whatever's in hand sits in the right paw.
         blaster.position = SIMD3(0, -10, -1) / Crew.pixels
         blaster.orientation = simd_quatf(angle: -.pi / 2, axis: SIMD3(1, 0, 0))
         blaster.isEnabled = false
         armR.addChild(blaster)
+    }
+
+    /// What's in hand: laser, gun, launcher, tool, charge, radio or alien; nil for nothing.
+    func hold(_ style: String?) {
+        guard style != heldStyle else { return }
+        heldStyle = style
+        for child in Array(blaster.children) { child.removeFromParent() }
+        let steel = SIMD3<Float>(0.24, 0.27, 0.33)
+        let dark = SIMD3<Float>(0.14, 0.15, 0.18)
+        let olive = SIMD3<Float>(0.42, 0.48, 0.23)
+        let hazard = SIMD3<Float>(1, 0.76, 0.1)
+        func add(_ size: SIMD3<Float>, _ at: SIMD3<Float>, _ c: SIMD3<Float>, _ opacity: Float = 1) {
+            blaster.addChild(CrewRig.box(size, at: at, c, opacity: opacity))
+        }
+        switch style {
+        case "laser":
+            add(SIMD3(0.09, 0.11, 0.3), SIMD3(0, 0, -0.08), steel)
+            add(SIMD3(0.05, 0.05, 0.06), SIMD3(0, 0.01, -0.26), SIMD3(1, 0.45, 0.85))
+        case "gun":
+            add(SIMD3(0.08, 0.12, 0.5), SIMD3(0, 0, -0.14), dark)
+            add(SIMD3(0.05, 0.05, 0.22), SIMD3(0, 0.02, -0.48), steel)
+            add(SIMD3(0.06, 0.14, 0.08), SIMD3(0, -0.1, -0.02), dark)
+        case "launcher":
+            add(SIMD3(0.16, 0.16, 0.8), SIMD3(0, 0.08, -0.1), olive)
+            add(SIMD3(0.18, 0.18, 0.06), SIMD3(0, 0.08, -0.5), dark)
+            add(SIMD3(0.06, 0.12, 0.08), SIMD3(0, -0.06, -0.05), dark)
+        case "tool":
+            add(SIMD3(0.05, 0.05, 0.55), SIMD3(0, 0, -0.18), SIMD3(0.55, 0.38, 0.2))
+            add(SIMD3(0.14, 0.26, 0.12), SIMD3(0, 0, -0.46), steel)
+        case "charge":
+            add(SIMD3(0.18, 0.12, 0.14), SIMD3(0, 0, -0.06), SIMD3(0.86, 0.18, 0.16))
+            add(SIMD3(0.19, 0.03, 0.15), SIMD3(0, 0, -0.06), hazard)
+        case "radio":
+            add(SIMD3(0.1, 0.16, 0.06), SIMD3(0, 0, -0.04), olive)
+            add(SIMD3(0.02, 0.02, 0.2), SIMD3(0.03, 0.05, -0.16), dark)
+        case "alien":
+            add(SIMD3(0.1, 0.12, 0.42), SIMD3(0, 0, -0.14), SIMD3(0.55, 0.25, 0.95))
+            add(SIMD3(0.04, 0.16, 0.12), SIMD3(0.07, 0.02, -0.1), SIMD3(0.35, 0.95, 1))
+            add(SIMD3(0.04, 0.16, 0.12), SIMD3(-0.07, 0.02, -0.16), SIMD3(1, 0.5, 0.85))
+            add(SIMD3(0.02, 0.08, 0.1), SIMD3(0, 0.1, -0.02), SIMD3(1, 0.8, 0.3))
+            add(SIMD3(0.09, 0.09, 0.09), SIMD3(0, 0, -0.4), SIMD3(0.05, 0.02, 0.1))
+        default:
+            break
+        }
+    }
+
+    /// A hammer swing.
+    func swing() {
+        swingTime = 0.28
     }
 
     /// Move the figure for this frame.
@@ -159,13 +208,19 @@ final class CrewRig {
         armL.orientation = simd_quatf(angle: flying ? 0.35 : -swing * 0.8, axis: SIMD3(1, 0, 0))
             * simd_quatf(angle: flying ? -0.25 : 0, axis: SIMD3(0, 0, 1))
         let look = max(min(pitch, 1.1), -1.1)
-        if aiming {
+        if swingTime > 0 {
+            // Up high, then down hard.
+            swingTime = max(0, swingTime - dt)
+            let t = 1 - swingTime / 0.28
+            let angle: Float = t < 0.35 ? 2.6 * (t / 0.35) : 2.6 - 2.0 * min(1, (t - 0.35) / 0.3)
+            armR.orientation = simd_quatf(angle: angle, axis: SIMD3(1, 0, 0))
+        } else if aiming {
             armR.orientation = simd_quatf(angle: .pi / 2 + look, axis: SIMD3(1, 0, 0))
         } else {
             armR.orientation = simd_quatf(angle: flying ? 0.35 : swing * 0.8, axis: SIMD3(1, 0, 0))
                 * simd_quatf(angle: flying ? 0.25 : 0, axis: SIMD3(0, 0, 1))
         }
-        blaster.isEnabled = aiming
+        blaster.isEnabled = heldStyle != nil
         head.orientation = simd_quatf(angle: max(min(pitch, 0.7), -0.6), axis: SIMD3(1, 0, 0))
 
         // A little bounce in the step, and a lean forward when flying fast.

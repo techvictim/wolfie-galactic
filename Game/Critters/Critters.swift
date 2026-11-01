@@ -408,6 +408,21 @@ final class Critters {
         return .zapped(c.kind)
     }
 
+    /// A blast or a black hole nearby: grumpy critters poof home, friendly ones get a fright and run.
+    func blast(at point: SIMD3<Float>, radius: Float) -> [ZapResult] {
+        var results: [ZapResult] = []
+        for id in Array(critters.keys) {
+            guard let c = critters[id], simd_distance(c.position, point) < radius else { continue }
+            if let result = zap(id, from: point, hitsToPoof: 1) { results.append(result) }
+        }
+        return results
+    }
+
+    /// How far the nearest critter is, for mines.
+    func nearestDistance(to point: SIMD3<Float>) -> Float {
+        critters.values.map { simd_distance($0.position, point) }.min() ?? .infinity
+    }
+
     // MARK: Little effects
 
     private func popHearts(at point: SIMD3<Float>) {

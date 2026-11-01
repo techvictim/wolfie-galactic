@@ -41,7 +41,7 @@ final class Effects {
     private let cube = MeshResource.generateBox(size: 1)
     private var materials: [String: UnlitMaterial] = [:]
 
-    private static let maxParticles = 260
+    private static let maxParticles = 420
 
     /// Flames cool as they age.
     private static let fire: [SIMD3<Float>] = [
@@ -99,6 +99,67 @@ final class Effects {
             spawn(.smoke, at: center + dir * 0.3, velocity: SIMD3(dir.x * 0.8, Float.random(in: 1.2...2.2), dir.z * 0.8),
                   life: Float.random(in: 0.8...1.3), size: (0.35, 1.1), gravity: 0, drag: 1.2)
         }
+    }
+
+    /// A weapon's explosion, sized by its blast radius: a big flash, a ball of fire, flying chunks
+    /// in the colours of what blew up, sparks and a rising cloud of smoke.
+    func explosion(at center: SIMD3<Float>, radius r: Float, colors: [SIMD3<Float>]) {
+        let scale = max(1, r)
+        let budget = Float(Effects.maxParticles - particles.count)
+        // Big booms share the particle budget, so several at once still look good.
+        let share = min(1, budget / 90)
+        spawn(.flash, at: center, velocity: .zero, life: 0.12 + 0.02 * scale, size: (0.8 * scale, 2.6 * scale), gravity: 0, drag: 0)
+        for _ in 0..<Int(Float(18 + Int(scale * 4)) * share) {
+            let dir = Effects.randomDirection(upward: 0.5)
+            spawn(.flame, at: center + dir * 0.3 * scale, velocity: dir * Float.random(in: 2...5) * scale,
+                  life: Float.random(in: 0.35...0.7), size: (Float.random(in: 0.4...0.7) * sqrt(scale), 0.08), gravity: -3, drag: 3)
+        }
+        for _ in 0..<Int(Float(10 + Int(scale * 2)) * share) {
+            let dir = Effects.randomDirection(upward: 0.7)
+            spawn(.ember, at: center, velocity: dir * Float.random(in: 8...14) * sqrt(scale), life: Float.random(in: 0.4...0.9),
+                  size: (0.1, 0.03), gravity: 9, drag: 0.8)
+        }
+        let chunkColors = colors.isEmpty ? [SIMD3<Float>(0.5, 0.45, 0.4)] : colors
+        for i in 0..<Int(Float(8 + Int(scale * 2)) * share) {
+            let dir = Effects.randomDirection(upward: 0.9)
+            spawn(.debris(chunkColors[i % chunkColors.count]), at: center + dir * 0.4 * scale, velocity: dir * Float.random(in: 4...9) * sqrt(scale),
+                  life: Float.random(in: 0.8...1.5), size: (Float.random(in: 0.2...0.38), 0.05), gravity: 18, drag: 0.5)
+        }
+        for _ in 0..<Int(Float(6 + Int(scale * 1.5)) * share) {
+            let dir = Effects.randomDirection(upward: 2)
+            spawn(.smoke, at: center + dir * 0.5 * scale, velocity: SIMD3(dir.x * scale, Float.random(in: 1.5...3) * sqrt(scale), dir.z * scale),
+                  life: Float.random(in: 1.2...2.2), size: (0.6 * sqrt(scale), 1.8 * sqrt(scale)), gravity: 0, drag: 1)
+        }
+    }
+
+    /// A tongue of flame from the Flamer.
+    func flameJet(from start: SIMD3<Float>, direction: SIMD3<Float>, range: Float) {
+        for _ in 0..<3 {
+            let wobble = Effects.randomDirection(upward: 0) * 0.08
+            let dir = simd_normalize(direction + wobble)
+            let speed = range * Float.random(in: 1.7...2.1)
+            spawn(.flame, at: start, velocity: dir * speed, life: Float.random(in: 0.4...0.55),
+                  size: (0.12, Float.random(in: 0.8...1.2)), gravity: -2, drag: 1.4)
+        }
+    }
+
+    /// A puff of smoke (and a spark of fire) behind a rocket.
+    func trail(at point: SIMD3<Float>, fire: Bool) {
+        if fire {
+            spawn(.flame, at: point, velocity: Effects.randomDirection(upward: 0) * 0.6, life: 0.2, size: (0.3, 0.05), gravity: 0, drag: 2)
+        }
+        spawn(.smoke, at: point, velocity: SIMD3(0, 0.6, 0) + Effects.randomDirection(upward: 0) * 0.3, life: Float.random(in: 0.6...1.0),
+              size: (0.25, 0.8), gravity: 0, drag: 1)
+    }
+
+    /// A bit of the world being pulled into a black hole.
+    func suck(from point: SIMD3<Float>, to center: SIMD3<Float>, color: SIMD3<Float>) {
+        let span = center - point
+        let distance = max(simd_length(span), 0.1)
+        let speed = Float.random(in: 9...14)
+        let swirl = simd_normalize(simd_cross(span, SIMD3(0, 1, 0)) + SIMD3(0, 0.001, 0)) * speed * 0.4
+        spawn(.debris(color), at: point, velocity: span / distance * speed + swirl, life: distance / speed,
+              size: (Float.random(in: 0.25...0.45), 0.05), gravity: 0, drag: 0)
     }
 
     /// A smaller burst where a bolt hits but doesn't break anything.

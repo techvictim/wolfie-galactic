@@ -131,7 +131,7 @@ struct HUDView: View {
 
     var body: some View {
         ZStack {
-            Crosshair(laser: game.laserSelected)
+            Crosshair(laser: game.laserSelected || game.heldItem.weapon != nil)
                 .allowsHitTesting(false)
 
             VStack {
@@ -354,11 +354,11 @@ struct HelpCard: View {
             ]
             if flying { rows.append(([kb ? "Shift" : "B"], "Fly down · land on the ground")) }
             rows += [
-                ([kb ? "Click" : "RT"], "Break blocks · fire the laser"),
-                ([kb ? "Right-click" : "LT"], "Place a block · pet a critter"),
+                ([kb ? "Click" : "RT"], "Break blocks · fire the laser or weapon"),
+                ([kb ? "Right-click" : "LT"], "Place a block · pet a critter · Sniper scope · set off Remotes"),
                 ([kb ? "Q  E" : "LB  RB"], "Pick from the hotbar"),
                 ([kb ? "F" : "Y"], "Get in a vehicle or ship"),
-                ([kb ? "I" : "X"], "Backpack: hold things and make new ones"),
+                ([kb ? "I" : "X"], "Backpack: weapons, blocks, builds and vehicles"),
                 ([kb ? "Tab" : "D-pad ↑"], "Map: find friends and zoom to them"),
                 ([kb ? "Esc" : "≡"], "Pause, Critter Book, settings")
             ]
@@ -677,7 +677,7 @@ struct HotbarView: View {
                 ItemIcon(item: item)
                     .frame(width: UIMetrics.points(44), height: UIMetrics.points(44))
                     .overlay(alignment: .bottomTrailing) {
-                        if item != .laser && !game.freeBuild {
+                        if !item.isTool && !game.freeBuild {
                             Text("\(game.count(item))")
                                 .font(.game(12).weight(.heavy).monospacedDigit())
                                 .foregroundStyle(game.count(item) > 0 ? .white : Color(red: 1, green: 0.5, blue: 0.5))
@@ -721,11 +721,11 @@ struct ItemIcon: View {
                         .shadow(color: .black, radius: 2)
                 }
             }
-        case .build, .vehicle:
+        case .build, .vehicle, .weapon:
             if let picture = ItemIcon.picture(item) {
                 picture.resizable().interpolation(.high).scaledToFit()
             } else {
-                Image(systemName: item.isVehicle ? "car.fill" : "house.fill")
+                Image(systemName: item.isVehicle ? "car.fill" : (item.weapon != nil ? "scope" : "house.fill"))
                     .font(.gameIcon(26, weight: .bold))
                     .foregroundStyle(.white)
             }
@@ -876,6 +876,11 @@ struct BackpackDetail: View {
                 if case .block(let id) = item, let machine = Machine(rawValue: id) {
                     Text(machine.help).font(.game(14)).foregroundStyle(.white.opacity(0.75))
                 }
+                if let weapon = item.weapon {
+                    Text("\(weapon.group) · \(weapon.about)").font(.game(14)).foregroundStyle(.white.opacity(0.75))
+                } else if item == .laser {
+                    Text("Hand tools · Hold to slice through blocks").font(.game(14)).foregroundStyle(.white.opacity(0.75))
+                }
                 if let recipe, !game.freeBuild {
                     HStack(spacing: 8) {
                         Text(recipe.count > 1 ? "Make \(recipe.count) from" : "Make from")
@@ -891,7 +896,7 @@ struct BackpackDetail: View {
                             }
                         }
                     }
-                } else if !game.freeBuild {
+                } else if !game.freeBuild && !item.isTool {
                     Text("Find it out in the world").font(.game(14)).foregroundStyle(.white.opacity(0.6))
                 }
             }

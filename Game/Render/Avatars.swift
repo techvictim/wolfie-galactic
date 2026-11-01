@@ -138,6 +138,7 @@ final class Avatars {
             avatar.body.orientation = simd_quatf(angle: shown.yaw, axis: SIMD3<Float>(0, 1, 0))
             let moved = shown.position - before
             let speed = dt > 0 ? simd_length(SIMD2<Float>(moved.x, moved.z)) / dt : 0
+            avatar.rig.hold(shown.laserEnd != nil ? "laser" : nil)
             avatar.rig.animate(dt: dt, speed: min(speed, 20), pitch: shown.pitch, flying: shown.flying, aiming: shown.laserEnd != nil)
 
             if let end = shown.laserEnd, !away {

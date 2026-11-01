@@ -141,6 +141,24 @@ extension Game {
         send(.block(planet: planet.id, x: p.x, y: p.y, z: p.z, id: id))
     }
 
+    /// Tell everyone about a blast, so their worlds lose the same blocks.
+    func shareBlast(at p: SIMD3<Float>, radius: Float) {
+        send(.blast(planet: planet.id, x: p.x, y: p.y, z: p.z, radius: radius))
+    }
+
+    /// A friend's blast: show it if it's here, and take the blocks away.
+    private func friendBlast(planet planetID: String, at p: SIMD3<Float>, radius: Float) {
+        if planetID == planet.id {
+            if place == .surface {
+                explode(at: p, radius: radius, nuke: radius >= 12, fromFriend: true)
+            } else {
+                Game.carve(world, at: p, radius: radius)
+            }
+        } else if session == .hosting, let other = hostWorld(planetID) {
+            Game.carve(other, at: p, radius: radius)
+        }
+    }
+
     /// Tell everyone a vehicle moved, was taken, parked, or flew off.
     func shareVehicle(_ v: Vehicle, on planetID: String, driver: Int?, gone: Bool = false) {
         guard session != .solo else { return }
@@ -309,6 +327,9 @@ extension Game {
         case let .block(planetID, x, y, z, block):
             hostWorld(planetID)?.set(SIMD3(x, y, z), block)
             host.broadcast(.block(planet: planetID, x: x, y: y, z: z, id: block), except: id)
+        case let .blast(planetID, x, y, z, radius):
+            friendBlast(planet: planetID, at: SIMD3(x, y, z), radius: radius)
+            host.broadcast(.blast(planet: planetID, x: x, y: y, z: z, radius: radius), except: id)
         case let .askPlanet(planetID):
             let edits = (try? hostWorld(planetID)?.compressedEdits()) ?? [:]
             host.send(.planetData(planet: planetID, edits: edits, vehicles: notes(for: planetID)), to: id)
@@ -419,6 +440,8 @@ extension Game {
         case let .block(planetID, x, y, z, block):
             // Changes on other planets arrive with that planet when you go there.
             if planetID == planet.id { world.set(SIMD3(x, y, z), block) }
+        case let .blast(planetID, x, y, z, radius):
+            friendBlast(planet: planetID, at: SIMD3(x, y, z), radius: radius)
         case let .planetData(planetID, edits, notes):
             for note in notes { remember(note) }
             arrivedPlanets[planetID] = edits

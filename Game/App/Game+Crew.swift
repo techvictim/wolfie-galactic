@@ -25,7 +25,9 @@ extension Game {
         me.root.position = position
         me.root.orientation = simd_quatf(angle: player.yaw, axis: SIMD3<Float>(0, 1, 0))
         let jetting = player.flying || critterClock - jumpPadClock < 1.2
-        me.animate(dt: dt, speed: speed, pitch: player.pitch, flying: jetting, aiming: laserSelected)
+        let weapon = heldWeapon
+        me.hold(weapon?.hand ?? (laserSelected ? "laser" : nil))
+        me.animate(dt: dt, speed: speed, pitch: player.pitch, flying: jetting, aiming: laserSelected || (weapon?.aimed ?? false))
     }
 
     // MARK: Picking a character

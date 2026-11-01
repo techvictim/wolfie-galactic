@@ -42,6 +42,8 @@ you're doing. The full list is under Controls on the title screen and in the pau
 | `Tools/make_models.py` | Vehicle models (rover, starship, moon buggy, hover bike) from simple shapes. |
 | `Tools/make_space.py` | Planets seen from space, the spaceport, and the Comet, Hauler and Zoomer ships. |
 | `Tools/make_critters.py` | Critter models and their Critter Book pictures. |
+| `Tools/make_weapon_icons.py` | Weapon pictures for the backpack, from the Wolfie Military icons. |
+| `Resources/weapons.json` | Every weapon: damage, speed, cooldown, blast size. Change a number and rebuild. |
 | `Tools/make_crew.py` | The seven Wolfie Military crew members as voxel characters, with their portraits. |
 | `Resources/Voices` | The crew's voice clips (`<who>_<kind>_<n>.mp3`), the same generated voices as Wolfie Military. |
 | `Tools/make_sounds.py` | Every sound effect and music loop. |

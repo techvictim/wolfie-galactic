@@ -49,5 +49,5 @@
     "block:22": 20, "block:24": 10, "block:31": 2, "block:33": 2, "block:32": 2,
     "build:house": 1, "build:pad": 1, "vehicle:hoverbike": 1
   },
-  "hotbar": ["laser", "block:7", "block:8", "block:9", "block:11", "build:house"]
+  "hotbar": ["laser", "weapon:rocket", "block:7", "block:8", "block:9", "build:house"]
 }

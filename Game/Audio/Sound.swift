@@ -22,7 +22,7 @@ final class Sound {
     private var musicName: String?
     private var fadingOut: [AVAudioPlayer] = []
 
-    private static let voiceCount = 14
+    private static let voiceCount = 22
     /// Music volume for Off, Low, Medium, High.
     static let musicLevels: [Float] = [0, 0.22, 0.4, 0.6]
 
@@ -182,6 +182,9 @@ final class Sound {
         "critter-chirp", "critter-boop", "critter-squeak", "critter-click", "befriend",
         "grumble", "poof", "zap-critter", "startle", "hurt", "heart", "knocked-out", "friend-joined",
         "rover-engine", "ship-engine", "horn", "vehicle-in", "vehicle-out", "bump", "bolt", "explode", "hyperspace", "entry",
-        "pickup", "craft", "boing", "zoom", "teleport"
+        "pickup", "craft", "boing", "zoom", "teleport",
+        "hammer", "sledge", "flame-loop", "gun-mini", "gun-heavy", "gun-sniper", "gun-rifle", "shotgun",
+        "cannon", "rocket", "throw", "gl", "mortar", "bounce", "stick", "beep", "boom-big", "boom-huge", "nuke",
+        "whistle", "jet", "bomber", "gunship", "drone", "radio", "blackhole-open", "blackhole-loop", "blackhole-close"
     ]
 }

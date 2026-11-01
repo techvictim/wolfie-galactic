@@ -9,6 +9,8 @@ enum Item: Hashable, Sendable {
     /// A pre-made build from builds.json.
     case build(String)
     case vehicle(VehicleKind)
+    /// A Wolfie Military weapon from weapons.json.
+    case weapon(String)
 
     /// "laser", "block:7", "build:house", "vehicle:rover"
     var key: String {
@@ -17,6 +19,7 @@ enum Item: Hashable, Sendable {
         case .block(let id): return "block:\(id)"
         case .build(let id): return "build:\(id)"
         case .vehicle(let kind): return "vehicle:\(kind.rawValue)"
+        case .weapon(let id): return "weapon:\(id)"
         }
     }
 
@@ -28,6 +31,7 @@ enum Item: Hashable, Sendable {
         case "block": guard let id = UInt8(parts[1]) else { return nil }; self = .block(id)
         case "build": self = .build(parts[1])
         case "vehicle": guard let kind = VehicleKind(rawValue: parts[1]) else { return nil }; self = .vehicle(kind)
+        case "weapon": guard Arsenal.shared.weapon(parts[1]) != nil else { return nil }; self = .weapon(parts[1])
         default: return nil
         }
     }
@@ -35,6 +39,19 @@ enum Item: Hashable, Sendable {
     var isVehicle: Bool {
         if case .vehicle = self { return true }
         return false
+    }
+
+    /// The laser and weapons: always yours, never used up.
+    var isTool: Bool {
+        switch self {
+        case .laser, .weapon: return true
+        default: return false
+        }
+    }
+
+    var weapon: WeaponDef? {
+        if case .weapon(let id) = self { return Arsenal.shared.weapon(id) }
+        return nil
     }
 
     var isMachine: Bool {
@@ -66,10 +83,11 @@ enum Machine: UInt8, CaseIterable {
 
 /// The tabs in the backpack.
 enum ItemGroup: Int, CaseIterable {
-    case blocks, builds, vehicles, machines
+    case weapons, blocks, builds, vehicles, machines
 
     var title: String {
         switch self {
+        case .weapons: return "Weapons"
         case .blocks: return "Blocks"
         case .builds: return "Builds"
         case .vehicles: return "Vehicles"
@@ -79,6 +97,7 @@ enum ItemGroup: Int, CaseIterable {
 
     var symbol: String {
         switch self {
+        case .weapons: return "scope"
         case .blocks: return "cube.fill"
         case .builds: return "house.fill"
         case .vehicles: return "car.fill"
@@ -205,12 +224,15 @@ final class ItemCatalog {
         case .block(let id): return BlockRegistry.shared.name(id)
         case .build(let id): return build(id)?.name ?? "Build"
         case .vehicle(let kind): return kind.displayName
+        case .weapon(let id): return Arsenal.shared.weapon(id)?.name ?? "Weapon"
         }
     }
 
     /// Everything that belongs on a backpack tab, whether you have it yet or not.
     func catalog(_ group: ItemGroup) -> [Item] {
         switch group {
+        case .weapons:
+            return [.laser] + Arsenal.shared.weapons.map { .weapon($0.id) }
         case .blocks:
             // Blocks you can find in the world or make, but not machines.
             return BlockRegistry.shared.allIDs

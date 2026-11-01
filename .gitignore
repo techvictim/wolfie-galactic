@@ -6,3 +6,4 @@ DerivedData/
 .DS_Store
 *.wgworld
 Tools/__pycache__/
+__pycache__/

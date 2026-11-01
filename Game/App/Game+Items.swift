@@ -11,15 +11,15 @@ extension Game {
     var freeBuild: Bool { GameSettings.shared.freeBuild }
 
     func count(_ item: Item) -> Int {
-        item == .laser ? 1 : backpack[item.key] ?? 0
+        item.isTool ? 1 : backpack[item.key] ?? 0
     }
 
     func has(_ item: Item) -> Bool {
-        freeBuild || item == .laser || count(item) > 0
+        freeBuild || item.isTool || count(item) > 0
     }
 
     func add(_ item: Item, _ n: Int = 1) {
-        guard item != .laser, n > 0 else { return }
+        guard !item.isTool, n > 0 else { return }
         backpack[item.key, default: 0] += n
         saveBackpack()
     }
@@ -27,7 +27,7 @@ extension Game {
     /// Use one up. True if you had one (always, in Free build).
     @discardableResult
     func take(_ item: Item, _ n: Int = 1) -> Bool {
-        if freeBuild || item == .laser { return true }
+        if freeBuild || item.isTool { return true }
         guard count(item) >= n else { return false }
         backpack[item.key] = count(item) - n
         if backpack[item.key] == 0 { backpack[item.key] = nil }
@@ -266,7 +266,7 @@ extension Game {
     func placeHeld(target: RayHit, pressedNow: Bool) -> Bool {
         let item = heldItem
         switch item {
-        case .laser:
+        case .laser, .weapon:
             return false
         case .block(let id):
             let cell = target.previous
