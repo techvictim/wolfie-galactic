@@ -32,7 +32,6 @@
     { "makes": "build:pad",    "count": 1, "needs": { "block:9": 40, "block:11": 4 } },
     { "makes": "build:bridge", "count": 1, "needs": { "block:7": 30, "block:9": 10 } },
     { "makes": "build:statue", "count": 1, "needs": { "block:9": 30, "block:11": 2 } },
-    { "makes": "build:rocket", "count": 1, "needs": { "block:22": 40, "block:25": 10, "block:8": 2 } },
     { "makes": "build:hut",    "count": 1, "needs": { "block:29": 12, "block:9": 6 } },
     { "makes": "build:wall",   "count": 1, "needs": { "block:15": 20 } },
 

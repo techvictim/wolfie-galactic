@@ -223,13 +223,13 @@ def make_vehicles():
 
     # Laser bolt: a quick bright "pew".
     pew = sweep(2200, 520, 0.14, "square", 0.45) * env(int(0.14 * SR), 0.001, 0.09)
-    save_sfx("bolt", mix(lowpass(pew, 5000) * 0.7, sweep(4400, 1000, 0.14) * env(int(0.14 * SR), 0.001, 0.06) * 0.3), 0.55)
+    save_sfx("bolt", lowpass(mix(pew * 0.7, sweep(4400, 1000, 0.1) * env(int(0.1 * SR), 0.001, 0.05) * 0.2), 3500), 0.35)
     # Block explosion: a punchy boom with crackle and a little rumble tail.
-    n = 0.55
-    boom = lowpass(noise(n), 900, 3) * env(int(n * SR), 0.002, 0.35)
+    n = 0.4
+    boom = lowpass(noise(n), 800, 3) * env(int(n * SR), 0.002, 0.25)
     thud = sweep(110, 38, n, "sine", 0.4) * env(int(n * SR), 0.002, 0.3)
     crackle = bandpass(noise(0.25), 1500, 7000) * env(int(0.25 * SR), 0.001, 0.12)
-    save_sfx("explode", mix(boom * 1.2, thud * 1.1, crackle * 0.5), 0.85)
+    save_sfx("explode", lowpass(mix(boom * 1.2, thud * 1.1, crackle * 0.25), 4000), 0.55)
 
     # Hyperspace: a rising charge, a bright zap, then a long rushing whoosh that fades.
     n = 3.2
@@ -272,36 +272,36 @@ def gunshot(seconds, body=1200, snap=0.6, thump=120):
 
 def make_weapons():
     # Hand tools.
-    save_sfx("hammer", mix(lowpass(noise(0.18), 1400) * env(int(0.18 * SR), 0.001, 0.07), sweep(180, 70, 0.18) * env(int(0.18 * SR), 0.001, 0.12)), 0.8)
-    save_sfx("sledge", mix(lowpass(noise(0.32), 900) * env(int(0.32 * SR), 0.001, 0.14), sweep(120, 40, 0.32) * env(int(0.32 * SR), 0.001, 0.22), bell(220, 0.4, 3) * 0.15), 0.85)
+    save_sfx("hammer", mix(lowpass(noise(0.12), 1200) * env(int(0.12 * SR), 0.001, 0.05), sweep(180, 70, 0.12) * env(int(0.12 * SR), 0.001, 0.08)), 0.45)
+    save_sfx("sledge", mix(lowpass(noise(0.2), 900) * env(int(0.2 * SR), 0.001, 0.09), sweep(120, 40, 0.2) * env(int(0.2 * SR), 0.001, 0.14)), 0.5)
     t = t_of(1.0)
     roar = bandpass(noise(1.0), 250, 3500) * (0.8 + 0.2 * np.sin(2 * np.pi * 9 * t)) + lowpass(noise(1.0), 300) * 0.6
     wavfile.write(os.path.join(OUT, "flame-loop.wav"), SR, (normalize(loop_crossfade(roar, 0.15), 0.55) * 32767).astype(np.int16))
 
     # Guns.
-    save_sfx("gun-mini", gunshot(0.07, 1600, 0.7, 160), 0.6)
-    save_sfx("gun-heavy", gunshot(0.16, 900, 0.7, 90), 0.75)
-    sniper = mix(gunshot(0.25, 1400, 1.0, 110), delay(lowpass(noise(0.9), 700) * env(int(0.9 * SR), 0.05, 0.6) * 0.35, 0.12))
-    save_sfx("gun-sniper", sniper, 0.85)
-    save_sfx("gun-rifle", mix(gunshot(0.22, 1200, 0.9, 100), delay(lowpass(noise(0.5), 600) * env(int(0.5 * SR), 0.03, 0.3) * 0.25, 0.1)), 0.8)
-    pump = mix(delay(bandpass(noise(0.05), 1500, 5000) * env(int(0.05 * SR), 0.001, 0.02), 0.32), delay(bandpass(noise(0.06), 1000, 4000) * env(int(0.06 * SR), 0.001, 0.03), 0.42))
-    save_sfx("shotgun", mix(gunshot(0.3, 800, 0.8, 80), pump * 0.4), 0.85)
+    # Kept short and soft: they repeat a lot.
+    save_sfx("gun-mini", lowpass(gunshot(0.045, 1400, 0.4, 160), 3500), 0.3)
+    save_sfx("gun-heavy", lowpass(gunshot(0.09, 900, 0.45, 90), 3000), 0.4)
+    sniper = mix(lowpass(gunshot(0.16, 1200, 0.6, 110), 3500), delay(lowpass(noise(0.35), 600) * env(int(0.35 * SR), 0.03, 0.2) * 0.2, 0.08))
+    save_sfx("gun-sniper", sniper, 0.5)
+    save_sfx("gun-rifle", mix(lowpass(gunshot(0.13, 1100, 0.6, 100), 3500), delay(lowpass(noise(0.25), 600) * env(int(0.25 * SR), 0.02, 0.15) * 0.15, 0.06)), 0.45)
+    save_sfx("shotgun", lowpass(gunshot(0.18, 800, 0.5, 80), 3000), 0.45)
 
     # Launchers and throwing.
-    save_sfx("cannon", mix(boom(0.6, 500, 90, 30, 0.2, 0.25), lowpass(noise(0.08), 3000) * env(int(0.08 * SR), 0.001, 0.03)), 0.85)
-    whoosh = bandpass(noise(0.7), 600, 6000) * np.sin(np.linspace(0, np.pi, int(0.7 * SR))) ** 0.6 * np.linspace(1, 0.3, int(0.7 * SR))
-    save_sfx("rocket", mix(lowpass(noise(0.12), 1500) * env(int(0.12 * SR), 0.001, 0.05), whoosh * 0.9, sweep(300, 900, 0.7, "saw", 0.6) * env(int(0.7 * SR), 0.01, 0.4) * 0.12), 0.75)
-    save_sfx("throw", bandpass(noise(0.25), 400, 3000) * np.sin(np.linspace(0, np.pi, int(0.25 * SR))) ** 2, 0.5)
-    save_sfx("gl", mix(sweep(260, 120, 0.12) * env(int(0.12 * SR), 0.001, 0.08), lowpass(noise(0.1), 1200) * env(int(0.1 * SR), 0.001, 0.05)), 0.7)
+    save_sfx("cannon", boom(0.35, 500, 90, 30, 0.1, 0.2), 0.5)
+    whoosh = bandpass(noise(0.4), 500, 3500) * np.sin(np.linspace(0, np.pi, int(0.4 * SR))) ** 0.8
+    save_sfx("rocket", mix(lowpass(noise(0.08), 1200) * env(int(0.08 * SR), 0.001, 0.04), whoosh * 0.7), 0.4)
+    save_sfx("throw", bandpass(noise(0.2), 400, 2500) * np.sin(np.linspace(0, np.pi, int(0.2 * SR))) ** 2, 0.3)
+    save_sfx("gl", mix(sweep(260, 120, 0.1) * env(int(0.1 * SR), 0.001, 0.06), lowpass(noise(0.08), 1000) * env(int(0.08 * SR), 0.001, 0.04)), 0.4)
     save_sfx("mortar", mix(sweep(150, 60, 0.3) * env(int(0.3 * SR), 0.001, 0.2), lowpass(noise(0.25), 900) * env(int(0.25 * SR), 0.001, 0.12), delay(bandpass(noise(0.4), 800, 4000) * env(int(0.4 * SR), 0.05, 0.3) * 0.3, 0.1)), 0.8)
-    save_sfx("bounce", mix(bell(1900, 0.12, 1.5) * 0.6, bandpass(noise(0.03), 2000, 6000) * env(int(0.03 * SR), 0.0005, 0.015)), 0.4)
+    save_sfx("bounce", mix(bell(1900, 0.08, 1.5) * 0.6, bandpass(noise(0.02), 2000, 6000) * env(int(0.02 * SR), 0.0005, 0.01)), 0.22)
     save_sfx("stick", mix(lowpass(noise(0.08), 700) * env(int(0.08 * SR), 0.001, 0.04), sweep(400, 200, 0.08, "tri") * env(int(0.08 * SR), 0.001, 0.05)), 0.55)
     save_sfx("beep", sweep(1760, 1760, 0.07, "square") * env(int(0.07 * SR), 0.002, 0.03), 0.3)
 
     # Booms, from a pop to the nuke.
-    save_sfx("boom-big", boom(1.1, 700, 90, 28, 0.45, 0.4), 0.9)
-    huge = mix(boom(2.0, 500, 70, 22, 0.35, 0.45), delay(lowpass(noise(1.6), 250, 3) * env(int(1.6 * SR), 0.1, 1.0) * 0.8, 0.2))
-    save_sfx("boom-huge", huge, 0.92)
+    save_sfx("boom-big", boom(0.65, 600, 90, 28, 0.2, 0.3), 0.55)
+    huge = mix(boom(1.1, 450, 70, 22, 0.2, 0.35), delay(lowpass(noise(0.8), 250, 3) * env(int(0.8 * SR), 0.05, 0.5) * 0.6, 0.15))
+    save_sfx("boom-huge", huge, 0.65)
     n = 6.0
     nuke = mix(boom(1.4, 400, 60, 20, 0.3, 0.5),
                delay(lowpass(noise(n), 160, 3) * env(int(n * SR), 0.3, 3.5) * 1.4, 0.3),

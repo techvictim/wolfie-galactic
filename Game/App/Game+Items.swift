@@ -45,7 +45,11 @@ extension Game {
     }
 
     static func loadHotbar() -> [Item] {
-        let saved = (UserDefaults.standard.stringArray(forKey: "hotbarItems") ?? []).compactMap(Item.init(key:))
+        // Things that no longer exist (like the old Rocket build) become planks.
+        let saved = (UserDefaults.standard.stringArray(forKey: "hotbarItems") ?? []).compactMap(Item.init(key:)).map { item -> Item in
+            if case .build(let id) = item, ItemCatalog.shared.build(id) == nil { return .block(7) }
+            return item
+        }
         let items = saved.count == 6 ? saved : ItemCatalog.shared.startingHotbar
         return Array((items + Array(repeating: Item.block(7), count: 6)).prefix(6))
     }

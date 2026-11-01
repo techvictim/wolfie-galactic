@@ -155,6 +155,8 @@ final class Game {
     var warpGlow: Float = 0
     /// The ship you could swap to at the spaceport.
     var dockPrompt: VehicleKind?
+    /// Looking through the Sniper's scope.
+    var scoped = false
     /// The planet your ship points at, for a quick hyperspace jump.
     var hyperTarget: String?
     /// 0...1: clouds filling the view while coming down through an atmosphere.
@@ -372,7 +374,8 @@ final class Game {
     func syncCamera() {
         let eye = player.eye
         camera.orientation = player.orientation
-        guard GameSettings.shared.viewBehind else {
+        // The scope is always through your own eye.
+        guard GameSettings.shared.viewBehind && !armory.zoomed else {
             camera.position = eye
             aimOrigin = eye
             cameraCrowded = false
@@ -702,7 +705,7 @@ final class Game {
         } else if laserCooldown <= 0, let target, target.block.y > 0 {
             blastBlock(target.block, loud: false)
             laserCooldown = 0.1
-            Sound.shared.playVaried("blast", volume: 0.45, spread: 0.15)
+            Sound.shared.playVaried("blast", volume: 0.25, spread: 0.15)
         }
     }
 

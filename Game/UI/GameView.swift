@@ -142,7 +142,13 @@ struct HUDView: View {
 
     var body: some View {
         ZStack {
-            Crosshair(laser: game.laserSelected || game.heldItem.weapon != nil)
+            if game.scoped {
+                ScopeView()
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            } else {
+                Crosshair(laser: game.laserSelected || game.heldItem.weapon != nil)
+            }
                 .allowsHitTesting(false)
 
             VStack {
@@ -422,6 +428,45 @@ struct AtmosphereVeil: View {
                     context.fill(cloud, with: .color(Color.white.opacity(alpha)))
                 }
             }
+        }
+    }
+}
+
+/// Looking through the Sniper's scope: black all round, a round lens with a faint blue edge,
+/// fine cross hairs and little range marks.
+struct ScopeView: View {
+    var body: some View {
+        Canvas { context, size in
+            let r = min(size.width, size.height) * 0.44
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+            let lens = Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
+            var outside = Path(CGRect(origin: .zero, size: size))
+            outside.addPath(lens)
+            context.fill(outside, with: .color(.black), style: FillStyle(eoFill: true))
+            // A soft dark edge inside the lens, with a hint of blue glass.
+            context.stroke(lens, with: .color(Color(red: 0.2, green: 0.35, blue: 0.6).opacity(0.5)), lineWidth: 6)
+            context.fill(lens, with: .radialGradient(Gradient(colors: [.clear, .clear, Color.black.opacity(0.55)]),
+                                                     center: c, startRadius: 0, endRadius: r))
+            let line = Color.black.opacity(0.85)
+            var hairs = Path()
+            hairs.move(to: CGPoint(x: c.x - r, y: c.y)); hairs.addLine(to: CGPoint(x: c.x + r, y: c.y))
+            hairs.move(to: CGPoint(x: c.x, y: c.y - r)); hairs.addLine(to: CGPoint(x: c.x, y: c.y + r))
+            context.stroke(hairs, with: .color(line), lineWidth: 1.5)
+            // Thicker posts toward the edge.
+            var posts = Path()
+            for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0)] {
+                posts.move(to: CGPoint(x: c.x + dx * r * 0.55, y: c.y + dy * r * 0.55))
+                posts.addLine(to: CGPoint(x: c.x + dx * r, y: c.y + dy * r))
+            }
+            context.stroke(posts, with: .color(line), lineWidth: 6)
+            // Range dots.
+            for k in 1...4 {
+                let d = r * 0.1 * Double(k)
+                for (dx, dy) in [(d, 0.0), (-d, 0.0), (0.0, d), (0.0, -d)] {
+                    context.fill(Path(ellipseIn: CGRect(x: c.x + dx - 2.5, y: c.y + dy - 2.5, width: 5, height: 5)), with: .color(line))
+                }
+            }
+            context.fill(Path(ellipseIn: CGRect(x: c.x - 2, y: c.y - 2, width: 4, height: 4)), with: .color(Color.red.opacity(0.9)))
         }
     }
 }
@@ -895,14 +940,19 @@ struct BackpackScreen: View {
                                         .foregroundStyle(amber)
                                         .padding(.leading, 4)
                                 }
-                                LazyVGrid(columns: Array(repeating: GridItem(.fixed(UIMetrics.points(124)), spacing: UIMetrics.points(10)), count: Game.backpackColumns),
-                                          alignment: .leading, spacing: UIMetrics.points(10)) {
-                                    ForEach(Array(section.items.enumerated()), id: \.offset) { k, item in
-                                        let index = starts[s] + k
-                                        BackpackTile(game: game, item: item, selected: index == min(game.backpackIndex, items.count - 1))
-                                            .id(index)
-                                            .onTapGesture { game.tapBackpack(index) }
+                                // Plain rows (not lazy), so the picked tile always exists to scroll to.
+                                let rowCount = (section.items.count + Game.backpackColumns - 1) / Game.backpackColumns
+                                ForEach(0..<rowCount, id: \.self) { row in
+                                    HStack(spacing: UIMetrics.points(10)) {
+                                        ForEach(0..<min(Game.backpackColumns, section.items.count - row * Game.backpackColumns), id: \.self) { column in
+                                            let k = row * Game.backpackColumns + column
+                                            let index = starts[s] + k
+                                            BackpackTile(game: game, item: section.items[k], selected: index == min(game.backpackIndex, items.count - 1))
+                                                .onTapGesture { game.tapBackpack(index) }
+                                        }
                                     }
+                                    .padding(.vertical, 4)
+                                    .id("row-\(starts[s] + row * Game.backpackColumns)")
                                 }
                             }
                         }
@@ -911,10 +961,13 @@ struct BackpackScreen: View {
                     }
                     .frame(maxHeight: .infinity)
                     .onChange(of: game.backpackIndex) { _, index in
-                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(index, anchor: .center) }
+                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(BackpackScreen.rowID(game, index), anchor: .center) }
                     }
                     .onChange(of: game.backpackTab) { _, _ in
-                        proxy.scrollTo(0, anchor: .top)
+                        proxy.scrollTo(BackpackScreen.rowID(game, 0), anchor: .top)
+                    }
+                    .onAppear {
+                        proxy.scrollTo(BackpackScreen.rowID(game, game.backpackIndex), anchor: .center)
                     }
                 }
 
@@ -932,6 +985,14 @@ struct BackpackScreen: View {
             .frame(maxWidth: UIMetrics.points(860), maxHeight: .infinity)
         }
         .animation(.easeInOut(duration: 0.2), value: game.backpackTab)
+    }
+}
+
+extension BackpackScreen {
+    /// The scroll id of the row holding an item: rows are named after their first item.
+    static func rowID(_ game: Game, _ index: Int) -> String {
+        let row = game.backpackRows.first { $0.contains(index) } ?? [0]
+        return "row-\(row.first ?? 0)"
     }
 }
 

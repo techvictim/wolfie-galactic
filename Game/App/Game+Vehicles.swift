@@ -263,7 +263,7 @@ extension Game {
             muzzle.x = v.kind.gunSpread * boltSide
             muzzle.y -= v.kind == .starship ? 0.5 : 0
         }
-        Sound.shared.playVaried("bolt", volume: 0.5, spread: 0.1)
+        Sound.shared.playVaried("bolt", volume: 0.3, spread: 0.1)
         effects.fireBolt(from: v.point(muzzle), to: end, color: Game.laserColor) { [weak self] in
             guard let self else { return }
             if let cat {
@@ -289,7 +289,7 @@ extension Game {
         noteBlockBlasted()
         effects.blockBurst(at: center, blockColor: BlockRegistry.shared.rgb(id))
         let distance = simd_distance(center, camera.position)
-        Sound.shared.playVaried("explode", volume: (loud ? 0.7 : 0.35) * max(0.25, min(1, 14 / max(distance, 1))), spread: 0.12)
+        Sound.shared.playVaried("explode", volume: (loud ? 0.45 : 0.22) * max(0.25, min(1, 14 / max(distance, 1))), spread: 0.12)
     }
 
     /// Starship camera: right behind the ship, looking where its nose points.

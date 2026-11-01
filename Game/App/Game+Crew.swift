@@ -9,7 +9,7 @@ extension Game {
 
     /// Stand your character where you are and move their arms and legs.
     func updateMe(dt: Float) {
-        let show = GameSettings.shared.viewBehind && !cameraCrowded
+        let show = GameSettings.shared.viewBehind && !cameraCrowded && !armory.zoomed
         me.root.isEnabled = show
         guard show else {
             lastMePosition = nil
@@ -108,21 +108,11 @@ extension Game {
 
     // MARK: Things the crew say
 
-    /// A block got blasted: lots in a row gets a "Timber!", now and then a laugh.
+    /// A block got blasted: just a rare laugh. (The "Timber!" lines were too much.)
     func noteBlockBlasted() {
-        let now = critterClock
-        recentBlasts.append(now)
-        recentBlasts.removeAll { now - $0 > 3 }
-        if recentBlasts.count >= 10 {
-            recentBlasts.removeAll()
-            Voices.shared.say("down", cooldown: 14)
-        } else {
-            Voices.shared.say("laugh", chance: 0.03, cooldown: 12)
-        }
+        Voices.shared.say("laugh", chance: 0.01, cooldown: 60)
     }
 
-    /// A vehicle bolt went boom.
-    func noteBigBlast() {
-        Voices.shared.say("blast", chance: 0.3, cooldown: 20)
-    }
+    /// Something went boom: stays quiet; the crew talk about the Glitch instead.
+    func noteBigBlast() {}
 }

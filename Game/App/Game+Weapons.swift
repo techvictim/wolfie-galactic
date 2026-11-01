@@ -52,6 +52,7 @@ extension Game {
         let zoomed = zoom > 1
         guard zoomed != armory.zoomed else { return }
         armory.zoomed = zoomed
+        scoped = zoomed
         camera.camera.fieldOfViewInDegrees = zoomed ? 70 / zoom : 70
         Sound.shared.play("hotbar", volume: 0.5, pitch: zoomed ? 0.8 : 1.1)
     }
@@ -95,7 +96,7 @@ extension Game {
             smash(at: center, radius: def.radius, effect: false)
             effects.explosion(at: center, radius: 0.7, colors: [])
         }
-        Sound.shared.playVaried(def.sound, volume: 0.9)
+        Sound.shared.playVaried(def.sound, volume: 0.55)
         armory.shake = max(armory.shake, def.radius > 1 ? 0.12 : 0.05)
     }
 
@@ -109,7 +110,7 @@ extension Game {
         }
         if !armory.flaming {
             armory.flaming = true
-            Sound.shared.startLoop("flame-loop", volume: 0.45)
+            Sound.shared.startLoop("flame-loop", volume: 0.22)
         }
         armory.flameSpray -= dt
         if armory.flameSpray <= 0 {
@@ -149,7 +150,8 @@ extension Game {
     // MARK: Guns
 
     private func shoot(_ def: WeaponDef, aim: LaserAim, critter: AimedCritter?) {
-        Sound.shared.playVaried(def.sound, volume: 0.75, spread: 0.06)
+        // Fast guns are quieter, so a long burst doesn't get tiring.
+        Sound.shared.playVaried(def.sound, volume: def.cooldown < 0.15 ? 0.28 : 0.45, spread: 0.06)
         armory.shake = max(armory.shake, def.pierce >= 8 ? 0.1 : 0.03)
         for pellet in 0..<max(1, def.pellets) {
             var direction = aim.direction
@@ -206,7 +208,7 @@ extension Game {
 
     private func launch(_ def: WeaponDef, aim: LaserAim) {
         guard armory.shots.count < Armory.maxShots else { return }
-        Sound.shared.playVaried(def.sound, volume: 0.7, spread: 0.08)
+        Sound.shared.playVaried(def.sound, volume: def.cooldown < 0.4 ? 0.32 : 0.45, spread: 0.08)
         var direction = aim.direction
         if def.lob > 0 { direction = simd_normalize(direction + SIMD3(0, def.lob, 0)) }
         let start = aim.muzzle + direction * 0.4
@@ -474,7 +476,7 @@ extension Game {
             }
         }
         let distance = simd_distance(p, camera.position)
-        let loud = max(0.2, min(1, (14 + r * 6) / max(distance, 1)))
+        let loud = max(0.12, min(0.7, (10 + r * 5) / max(distance, 1)))
         let sound = nuke ? "nuke" : (r >= 6 ? "boom-huge" : (r >= 3.4 ? "boom-big" : "explode"))
         Sound.shared.playVaried(sound, volume: loud, spread: 0.08)
         armory.shake = max(armory.shake, min(0.9, r * 0.05 * max(0.2, 1 - distance / (r * 12))))
@@ -510,11 +512,6 @@ extension Game {
         if driving == nil && d < r * 2.2 && d > 0.01 {
             let strength = (1 - d / (r * 2.2)) * min(14, 4 + r)
             player.knock(simd_normalize(away) * strength + SIMD3(0, strength * 0.5, 0))
-        }
-        if removed.count > 30 {
-            Voices.shared.say("down", cooldown: 10)
-        } else {
-            noteBigBlast()
         }
         return removed.count
     }
@@ -635,7 +632,6 @@ extension Game {
             armory.later(1) { drop("bomb", size: 1.8, from: target + SIMD3(0, 120, 0), to: target, speed: 55) }
         case "nuke":
             show("Nuke incoming! Get back!")
-            Voices.shared.say("blast", cooldown: 0)
             armory.later(1.5) { drop("bomb", size: 2.6, from: target + SIMD3(0, 160, 0), to: target, speed: 50, nuke: true) }
         case "cruise":
             show("Cruise missile on the way!")

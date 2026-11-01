@@ -389,7 +389,8 @@ extension Game {
         Sound.shared.play("robocat-down", at: point, listener: player.eye, facing: player.yaw, volume: 1, pitch: Float.random(in: 0.95...1.05))
         effects.spark(at: point + SIMD3(0, 0.8, 0))
         glitch.catsKnockedOut += 1
-        Voices.shared.say("laugh", chance: 0.25, cooldown: 30)
+        // "Glitch cleared!": a knocked-out robo-cat is a cured machine.
+        Voices.shared.say("cure", chance: 0.35, cooldown: 30)
     }
 
     /// The nearest robo-cat in front of you, if it's closer than any block.

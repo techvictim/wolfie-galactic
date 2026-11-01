@@ -80,20 +80,6 @@
       ]
     },
     {
-      "id": "rocket", "name": "Rocket", "size": [7, 17, 7],
-      "parts": [
-        { "shape": "column", "from": [1, 0, 1], "to": [5, 12, 5], "block": 22 },
-        { "shape": "column", "from": [1, 4, 1], "to": [5, 4, 5], "block": 25 },
-        { "shape": "column", "from": [1, 9, 1], "to": [5, 9, 5], "block": 25 },
-        { "shape": "roof", "from": [1, 13, 1], "to": [5, 16, 5], "block": 25 },
-        { "shape": "box", "from": [3, 7, 0], "to": [3, 7, 0], "block": 8 },
-        { "shape": "box", "from": [0, 0, 3], "to": [0, 3, 3], "block": 9 },
-        { "shape": "box", "from": [6, 0, 3], "to": [6, 3, 3], "block": 9 },
-        { "shape": "box", "from": [3, 0, 0], "to": [3, 3, 0], "block": 9 },
-        { "shape": "box", "from": [3, 0, 6], "to": [3, 3, 6], "block": 9 }
-      ]
-    },
-    {
       "id": "hut", "name": "Space Hut", "size": [7, 4, 7],
       "parts": [
         { "shape": "box", "from": [0, -1, 0], "to": [6, -1, 6], "block": 9 },
