@@ -8,7 +8,14 @@ import simd
 final class WorldRenderer {
     let root = Entity()
     private(set) var world: World
+    /// Textured blocks up close.
     private let material: UnlitMaterial?
+    /// Plain colours for the far-away land.
+    private let farMaterial: UnlitMaterial?
+    /// See-through blocks (the Glitch); changed to make them pulse.
+    private var glassMaterial: UnlitMaterial?
+    /// Chunks changed by blasts waiting to be rebuilt, a few each frame.
+    private var changedQueue: [ChunkKey] = []
 
     private var detail: [ChunkKey: ModelEntity] = [:]
     private var far: [TileKey: (entity: ModelEntity, skipped: Set<ChunkKey>, cell: Int)] = [:]
@@ -29,9 +36,21 @@ final class WorldRenderer {
     private static let maxJobs = 3
     private static let detailBatch = 4
 
-    init(world: World, material: UnlitMaterial?) {
+    init(world: World, material: UnlitMaterial?, farMaterial: UnlitMaterial?, glassMaterial: UnlitMaterial?) {
         self.world = world
         self.material = material
+        self.farMaterial = farMaterial
+        self.glassMaterial = glassMaterial
+    }
+
+    /// The Glitch's see-through blocks pulse: swap in a new material everywhere.
+    func setGlass(_ material: UnlitMaterial) {
+        glassMaterial = material
+        for entity in detail.values {
+            if let glass = entity.children.first as? ModelEntity, glass.model != nil {
+                glass.model?.materials = [material]
+            }
+        }
     }
 
     /// Show a different world (a new planet, or a fresh start).
@@ -46,6 +65,7 @@ final class WorldRenderer {
         pendingFar.removeAll()
         detailQueue.removeAll()
         farQueue.removeAll()
+        changedQueue.removeAll()
         wantedTiles.removeAll()
         focusChunk = nil
         running = 0
@@ -175,7 +195,7 @@ final class WorldRenderer {
 
     private struct DetailResult: Sendable {
         let key: ChunkKey
-        let mesh: MeshBuilder
+        let mesh: VoxelMesher.ChunkMeshes
     }
 
     private func startDetail(_ keys: [ChunkKey]) {
@@ -262,7 +282,7 @@ final class WorldRenderer {
             root.addChild(e)
             return e
         }()
-        if let material, let mesh = try? builder.mesh(name: "far-\(tile.x)-\(tile.z)") {
+        if let material = farMaterial, let mesh = try? builder.mesh(name: "far-\(tile.x)-\(tile.z)") {
             entity.model = ModelComponent(mesh: mesh, materials: [material])
             entity.isEnabled = true
         } else {
@@ -281,28 +301,48 @@ final class WorldRenderer {
         return dx * dx + dz * dz <= (detailRadius + 1) * (detailRadius + 1)
     }
 
-    private func show(_ builder: MeshBuilder, for key: ChunkKey) {
+    private func show(_ meshes: VoxelMesher.ChunkMeshes, for key: ChunkKey) {
         let entity = detail[key] ?? {
             let e = ModelEntity()
             e.position = SIMD3<Float>(Float(key.x * World.chunkSize), 0, Float(key.z * World.chunkSize))
+            // The see-through part is always the first child.
+            e.addChild(ModelEntity())
             root.addChild(e)
             return e
         }()
-        if let material, let mesh = try? builder.mesh(name: "chunk-\(key.x)-\(key.z)") {
+        if let material, let mesh = try? meshes.solid.mesh(name: "chunk-\(key.x)-\(key.z)") {
             entity.model = ModelComponent(mesh: mesh, materials: [material])
-            entity.isEnabled = true
         } else {
             entity.model = nil
-            entity.isEnabled = false
         }
+        if let glass = entity.children.first as? ModelEntity {
+            if let glassMaterial, let mesh = try? meshes.glass.mesh(name: "glass-\(key.x)-\(key.z)") {
+                glass.model = ModelComponent(mesh: mesh, materials: [glassMaterial])
+                glass.isEnabled = true
+            } else {
+                glass.model = nil
+                glass.isEnabled = false
+            }
+        }
+        entity.isEnabled = true
         detail[key] = entity
     }
 
     // MARK: Building and blasting
 
-    /// Rebuild chunks the player just changed, right away, so edits show up in the same frame.
+    /// Rebuild chunks that just changed. A few each frame, nearest first, so a big blast
+    /// doesn't freeze the game while every chunk it touched is rebuilt at once.
     private func remeshChanged() {
-        for key in world.takeChanged() where detail[key] != nil {
+        for key in world.takeChanged() where detail[key] != nil && !changedQueue.contains(key) {
+            changedQueue.append(key)
+        }
+        guard !changedQueue.isEmpty else { return }
+        if let focus = focusChunk, changedQueue.count > 1 {
+            changedQueue.sort { abs($0.x - focus.x) + abs($0.z - focus.z) < abs($1.x - focus.x) + abs($1.z - focus.z) }
+        }
+        for _ in 0..<min(3, changedQueue.count) {
+            let key = changedQueue.removeFirst()
+            guard detail[key] != nil else { continue }
             let mesh = VoxelMesher.chunk(
                 world.chunkData(key),
                 east: world.chunkData(ChunkKey(x: key.x + 1, z: key.z)),

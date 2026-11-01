@@ -163,6 +163,12 @@ extension Game {
         colors[Int(SB.glitchBlock)] = simd_mix(dark, dark * 1.7, SIMD3(repeating: pulse * 0.6))
         colors[Int(SB.glitchGlow)] = simd_mix(glow * 0.75, SIMD3(1, 0.62, 0.62), SIMD3(repeating: pulse))
         PaletteTexture.update(texture, colors: colors)
+        // Up close, Glitch blocks are see-through and breathe in and out.
+        glitch.glassTimer -= 0.1
+        if glitch.glassTimer <= 0, let atlas = blockAtlas {
+            glitch.glassTimer = 0.2
+            renderer.setGlass(BlockTextures.glassMaterial(atlas, opacity: 0.35 + 0.25 * pulse))
+        }
     }
 
     // MARK: Curing

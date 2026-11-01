@@ -22,6 +22,7 @@ final class GlitchState {
     var sparkTimer: Float = 0
     var glowClock: Float = 0
     var glowTimer: Float = 0
+    var glassTimer: Float = 0
     var humming = false
     /// Nests checked at least once this session.
     var seen: Set<String> = []

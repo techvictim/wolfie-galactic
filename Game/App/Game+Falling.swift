@@ -16,7 +16,7 @@ extension Game {
             var away = center - player.position
             away.y = 0
             let push = simd_length(away) > 0.1 ? simd_normalize(away) * 1.5 : SIMD3<Float>(0, 0, 0)
-            if falling.drop(blocks, material: blockMaterial, push: push) {
+            if falling.drop(blocks, material: textureMaterial, push: push) {
                 Sound.shared.play("creak", at: center, listener: player.eye, facing: player.yaw, volume: min(0.6, 0.15 + Float(blocks.count) / 400))
             } else {
                 // Too much falling at once: it just crumbles where it is.

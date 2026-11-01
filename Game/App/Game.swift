@@ -187,7 +187,11 @@ final class Game {
     @ObservationIgnored var arrivedPlanets: [String: [String: Data]] = [:]
     @ObservationIgnored var renderer: WorldRenderer!
     @ObservationIgnored private var hazeShells: [ModelEntity] = []
+    /// Plain block colours, for far-away land.
     @ObservationIgnored var blockMaterial: UnlitMaterial?
+    /// Minecraft-style textures, for blocks up close (and falling pieces).
+    @ObservationIgnored var textureMaterial: UnlitMaterial?
+    @ObservationIgnored var blockAtlas: TextureResource?
     /// The block colours, shared by every chunk (the Glitch's glow pulses in it).
     @ObservationIgnored var blockTexture: TextureResource?
     @ObservationIgnored private var lastJumpTap: Float = -10
@@ -308,7 +312,10 @@ final class Game {
         root.addChild(beam)
         root.addChild(impact)
 
-        renderer = WorldRenderer(world: world, material: blockMaterial)
+        blockAtlas = BlockTextures.makeTexture()
+        textureMaterial = blockAtlas.map(PaletteTexture.material) ?? blockMaterial
+        renderer = WorldRenderer(world: world, material: textureMaterial, farMaterial: blockMaterial,
+                                 glassMaterial: blockAtlas.map { BlockTextures.glassMaterial($0, opacity: 0.5) })
         root.addChild(renderer.root)
 
         // Haze: three thin see-through shells in the sky colour, so far land fades into the sky.

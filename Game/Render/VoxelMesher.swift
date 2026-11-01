@@ -33,6 +33,26 @@ struct MeshBuilder: Sendable {
         indices.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
     }
 
+    /// A one-block face with a textured tile: rect is (u0, v0, u1, v1).
+    mutating func addFace(_ face: VoxelFace, at origin: SIMD3<Float>, rect: SIMD4<Float>) {
+        let base = UInt32(positions.count)
+        for corner in face.corners {
+            positions.append(origin + corner)
+            normals.append(face.normal)
+            // Across and up the face, 0...1.
+            let a: Float, b: Float
+            if face.dir.y != 0 {
+                a = corner.x; b = corner.z
+            } else if face.dir.x != 0 {
+                a = face.dir.x > 0 ? 1 - corner.z : corner.z; b = corner.y
+            } else {
+                a = face.dir.z > 0 ? corner.x : 1 - corner.x; b = corner.y
+            }
+            uvs.append(SIMD2<Float>(rect.x + (rect.z - rect.x) * a, rect.y + (rect.w - rect.y) * b))
+        }
+        indices.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
+    }
+
     @MainActor
     func mesh(name: String) throws -> MeshResource? {
         guard !isEmpty else { return nil }
@@ -66,12 +86,17 @@ enum VoxelMesher {
         }
     }()
 
-    /// Mesh for one chunk, in the chunk's local coordinates (1 unit = 1 big block).
+    /// A chunk's solid blocks, and its see-through ones (drawn with a different material).
+    struct ChunkMeshes: Sendable {
+        var solid = MeshBuilder()
+        var glass = MeshBuilder()
+    }
+
+    /// Mesh for one chunk, in the chunk's local coordinates (1 unit = 1 big block), textured.
     /// The four side neighbours decide which faces on the chunk's edges can be seen.
-    static func chunk(_ c: [UInt8], east: [UInt8], west: [UInt8], south: [UInt8], north: [UInt8]) -> MeshBuilder {
-        var builder = MeshBuilder()
+    static func chunk(_ c: [UInt8], east: [UInt8], west: [UInt8], south: [UInt8], north: [UInt8]) -> ChunkMeshes {
+        var meshes = ChunkMeshes()
         let s = World.chunkSize
-        let paletteCount = BlockRegistry.maxBlocks
 
         // Skip the empty sky above the tallest block.
         var top = World.height
@@ -98,18 +123,24 @@ enum VoxelMesher {
                 for lx in 0..<s {
                     let id = c[TerrainGenerator.index(lx, y, lz)]
                     if id == B.air { continue }
+                    let glass = BlockTextures.isGlass(id)
                     for (faceIndex, face) in faces.enumerated() {
-                        if at(lx + face.dir.x, y + face.dir.y, lz + face.dir.z) != B.air { continue }
-                        builder.addFace(
-                            face,
-                            at: SIMD3<Float>(Float(lx), Float(y), Float(lz)),
-                            u: PaletteTexture.u(index: Int(id), face: faceIndex, count: paletteCount)
-                        )
+                        let next = at(lx + face.dir.x, y + face.dir.y, lz + face.dir.z)
+                        // Solid blocks show a face toward air or see-through blocks; see-through
+                        // blocks only toward air (so a glitched wall is one clear skin).
+                        if next != B.air && (glass || !BlockTextures.isGlass(next)) { continue }
+                        let rect = BlockTextures.rect(id: id, face: faceIndex)
+                        let origin = SIMD3<Float>(Float(lx), Float(y), Float(lz))
+                        if glass {
+                            meshes.glass.addFace(face, at: origin, rect: rect)
+                        } else {
+                            meshes.solid.addFace(face, at: origin, rect: rect)
+                        }
                     }
                 }
             }
         }
-        return builder
+        return meshes
     }
 }
 

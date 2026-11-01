@@ -120,8 +120,7 @@ final class FallingBlocks {
         var builder = MeshBuilder()
         for (p, id) in blocks {
             for (faceIndex, face) in VoxelMesher.faces.enumerated() where cells[p &+ face.dir] == nil {
-                builder.addFace(face, at: SIMD3<Float>(p) - center,
-                                u: PaletteTexture.u(index: Int(id), face: faceIndex, count: BlockRegistry.maxBlocks))
+                builder.addFace(face, at: SIMD3<Float>(p) - center, rect: BlockTextures.rect(id: id, face: faceIndex))
             }
         }
         guard let mesh = try? builder.mesh(name: "falling") else { return false }
