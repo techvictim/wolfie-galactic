@@ -102,6 +102,8 @@ final class World {
 
     /// Goes up every time a block changes, so things can tell when to look again.
     private(set) var revision = 0
+    /// Blocks that just became air, so the game can check whether anything above lost its support.
+    var removed: [SIMD3<Int>] = []
 
     // MARK: Blocks
 
@@ -139,6 +141,7 @@ final class World {
         let lz = floorMod(p.z, World.chunkSize)
         let index = TerrainGenerator.index(lx, p.y, lz)
         if let old = chunks[key]?[index], World.machineIDs.contains(old) { machines[old]?.remove(p) }
+        if id == B.air, let old = chunks[key]?[index], old != B.air, removed.count < 20_000 { removed.append(p) }
         if World.machineIDs.contains(id) { machines[id, default: []].insert(p) }
         chunks[key]?[index] = id
         revision &+= 1

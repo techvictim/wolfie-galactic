@@ -24,7 +24,7 @@ final class Sound {
 
     private static let voiceCount = 22
     /// Music volume for Off, Low, Medium, High.
-    static let musicLevels: [Float] = [0, 0.22, 0.4, 0.6]
+    static let musicLevels: [Float] = [0, 0.18, 0.32, 0.5]
 
     private init() {
         format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
@@ -147,11 +147,11 @@ final class Sound {
         guard started, name != musicName else { return }
         musicName = name
         if let old = music {
-            old.setVolume(0, fadeDuration: 1.5)
+            old.setVolume(0, fadeDuration: 5)
             fadingOut.append(old)
             let finished = old
             Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 1_700_000_000)
+                try? await Task.sleep(nanoseconds: 5_300_000_000)
                 finished.stop()
                 self?.fadingOut.removeAll { $0 === finished }
             }
@@ -165,7 +165,7 @@ final class Sound {
         player.volume = 0
         player.prepareToPlay()
         player.play()
-        player.setVolume(musicVolume, fadeDuration: 2)
+        player.setVolume(musicVolume, fadeDuration: 5)
         music = player
     }
 
@@ -186,6 +186,6 @@ final class Sound {
         "hammer", "sledge", "flame-loop", "gun-mini", "gun-heavy", "gun-sniper", "gun-rifle", "shotgun",
         "cannon", "rocket", "throw", "gl", "mortar", "bounce", "stick", "beep", "boom-big", "boom-huge", "nuke",
         "whistle", "jet", "bomber", "gunship", "drone", "radio", "blackhole-open", "blackhole-loop", "blackhole-close",
-        "robocat-meow", "robocat-hurt", "robocat-down", "robocat-charge", "robocat-laser", "glitch-hum", "cure", "build-tick", "glitch-alarm"
+        "robocat-meow", "robocat-hurt", "robocat-down", "robocat-charge", "robocat-laser", "glitch-hum", "cure", "build-tick", "glitch-alarm", "creak", "rubble"
     ]
 }

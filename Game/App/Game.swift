@@ -141,11 +141,15 @@ final class Game {
     @ObservationIgnored var lastMePosition: SIMD3<Float>?
     @ObservationIgnored var recentBlasts: [Float] = []
     @ObservationIgnored var sprinting = false
+    @ObservationIgnored var ambientTrack = Int.random(in: 1...6)
+    @ObservationIgnored var nextAmbientChange: Float = 0
     /// Weapons (see Game+Weapons.swift).
     @ObservationIgnored let armory = Armory()
     /// The Red Glitch (see Game+Glitch.swift).
     @ObservationIgnored let glitch = GlitchState()
     @ObservationIgnored let roboCats = RoboCats()
+    /// Blocks falling down (see Game+Falling.swift).
+    @ObservationIgnored let falling = FallingBlocks()
 
     // Space (see Game+Space.swift).
     var place: Place = .surface
@@ -183,7 +187,7 @@ final class Game {
     @ObservationIgnored var arrivedPlanets: [String: [String: Data]] = [:]
     @ObservationIgnored var renderer: WorldRenderer!
     @ObservationIgnored private var hazeShells: [ModelEntity] = []
-    @ObservationIgnored private var blockMaterial: UnlitMaterial?
+    @ObservationIgnored var blockMaterial: UnlitMaterial?
     /// The block colours, shared by every chunk (the Glitch's glow pulses in it).
     @ObservationIgnored var blockTexture: TextureResource?
     @ObservationIgnored private var lastJumpTap: Float = -10
@@ -284,6 +288,7 @@ final class Game {
         root.addChild(effects.root)
         root.addChild(armory.root)
         root.addChild(roboCats.root)
+        root.addChild(falling.root)
         root.addChild(pickups.root)
         root.addChild(ghost)
         root.addChild(space.root)
@@ -327,6 +332,8 @@ final class Game {
         effects.clear()
         armory.clear()
         roboCats.clear()
+        falling.clear()
+        world.removed.removeAll()
         glitch.forgetNearby()
         stopGlitchHum()
         pickups.clear()
@@ -438,6 +445,7 @@ final class Game {
         if screen == .playing && place == .surface && travelText == nil {
             updateArmory(dt: dt)
             updateGlitch(dt: dt)
+            updateFalling(dt: dt)
         } else {
             stopGlitchHum()
         }
@@ -1184,11 +1192,24 @@ final class Game {
         }
     }
 
-    /// Title music on the title screens, the planet's music everywhere else.
+    /// Title music on the title screens; while playing, quiet ambient loops take turns every few
+    /// minutes, fading slowly from one to the next so nothing stands out.
     private func updateMusic() {
-        let onTitle = screen == .title || (menuReturn == .title && (screen == .settings || screen == .controls || screen == .friends))
-        Sound.shared.playMusic((onTitle && travelText == nil) || place == .space ? "music-title" : "music-\(planet.id)")
+        let onTitle = screen == .title || (menuReturn == .title && (screen == .settings || screen == .controls || screen == .friends || screen == .crew || screen == .story))
+        if onTitle && travelText == nil {
+            Sound.shared.playMusic("music-title")
+            return
+        }
+        if clock >= nextAmbientChange {
+            nextAmbientChange = clock + Float.random(in: 150...240)
+            var next = Int.random(in: 1...Game.ambientCount)
+            if next == ambientTrack { next = next % Game.ambientCount + 1 }
+            ambientTrack = next
+        }
+        Sound.shared.playMusic("ambient-\(ambientTrack)")
     }
+
+    static let ambientCount = 6
 
     // MARK: Hotbar
 

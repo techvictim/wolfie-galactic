@@ -298,6 +298,14 @@ def make_weapons():
     save_sfx("stick", mix(lowpass(noise(0.08), 700) * env(int(0.08 * SR), 0.001, 0.04), sweep(400, 200, 0.08, "tri") * env(int(0.08 * SR), 0.001, 0.05)), 0.55)
     save_sfx("beep", sweep(1760, 1760, 0.07, "square") * env(int(0.07 * SR), 0.002, 0.03), 0.3)
 
+    # Falling pieces: a creak as they break away, a crumbly thud when they land.
+    creak = lowpass(sweep(140, 90, 0.5, "saw", 0.8) * (1 + 0.5 * np.sin(2 * np.pi * 23 * t_of(0.5))), 700) * env(int(0.5 * SR), 0.05, 0.3)
+    save_sfx("creak", creak, 0.35)
+    crumble = mix(lowpass(noise(0.6), 900, 3) * env(int(0.6 * SR), 0.003, 0.3),
+                  sweep(90, 40, 0.4) * env(int(0.4 * SR), 0.002, 0.2) * 0.8,
+                  *[delay(bandpass(noise(0.05), 600, 2500) * env(int(0.05 * SR), 0.001, 0.02) * 0.4, 0.08 + 0.07 * k) for k in range(5)])
+    save_sfx("rubble", crumble, 0.5)
+
     # Booms, from a pop to the nuke.
     save_sfx("boom-big", boom(0.65, 600, 90, 28, 0.2, 0.3), 0.55)
     huge = mix(boom(1.1, 450, 70, 22, 0.2, 0.35), delay(lowpass(noise(0.8), 250, 3) * env(int(0.8 * SR), 0.05, 0.5) * 0.6, 0.15))
@@ -641,19 +649,81 @@ def make_lofi(name, bpm, chords, seed, scale, bass_walk=True, lead=0.45, swing=0
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", wav, "-c:a", "aac", "-b:a", "128k", out], check=True)
     print(f"  {name}: {total:.0f} s loop")
 
+# ---------- ambient loops ----------
+# Very chill background loops that take turns while you play, made to sit quietly underneath
+# everything: slow soft chords, a few gentle chip notes far apart, sometimes a hushed beat, lots of
+# space. Nothing sharp, nothing that grabs your attention.
+
+def soft_chord_note(freq, seconds, warm):
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    a = chip_wave(freq, seconds, "tri", wobble=0.002) * 0.7
+    b = chip_wave(freq * 1.003, seconds, "pulse", duty=0.125, wobble=0.003) * 0.18
+    tone = lowpass(a + b, warm)
+    attack = np.minimum(1, t / 1.2)
+    release = np.minimum(1, (seconds - t) / 1.6)
+    return tone * np.clip(attack, 0, 1) * np.clip(release, 0, 1)
+
+def make_ambient(name, bpm, chords, seed, scale, beat=False, notes=0.25, warm=1100, bars_per_chord=4):
+    rng = np.random.default_rng(seed)
+    beat_len = 60 / bpm
+    bar = beat_len * 4
+    total = bar * bars_per_chord * len(chords)
+    n = int(total * SR)
+    pads = np.zeros(n)
+    sparkle = np.zeros(n)
+    drums = np.zeros(n)
+    for c, chord in enumerate(chords):
+        start = c * bars_per_chord * bar
+        length = bars_per_chord * bar + 1.8         # overlaps into the next chord
+        for k, note in enumerate(chord):
+            add_wrapped(pads, soft_chord_note(hz(note), length, warm) * 0.07, start + k * 0.15)
+        root = hz(chord[0]) / 2
+        add_wrapped(pads, soft_chord_note(root, length, 400) * 0.09, start)
+        # A few soft chip notes, far apart.
+        for b in range(bars_per_chord * 4):
+            if rng.random() < notes:
+                f = hz(scale[int(rng.integers(len(scale)))]) * 2
+                d = beat_len * float(rng.choice([1.5, 2, 3]))
+                wave = lowpass(chip_wave(f, d, "pulse", duty=0.25, vibrato=0.004), 2200)
+                add_wrapped(sparkle, wave * note_env(len(wave), 0.04, d * 0.5, 0.2) * 0.035, start + b * beat_len + rng.uniform(0, 0.2))
+    if beat:
+        kick, hat = lofi_kick(), lofi_hat()
+        for b in range(int(round(total / bar))):
+            t0 = b * bar
+            add_wrapped(drums, lowpass(kick, 300) * 0.35, t0)
+            add_wrapped(drums, lowpass(kick, 300) * 0.25, t0 + beat_len * 2.6)
+            for step in range(8):
+                if rng.random() < 0.6:
+                    add_wrapped(drums, hat * 0.05, t0 + (step // 2) * beat_len + (step % 2) * beat_len * 0.62)
+    music = pads + sparkle + drums
+    music = lowpass(music, 3200)
+    music += lowpass(highpass(noise(total), 900), 3500)[:n] * 0.004
+    stereo = stereo_reverb(music)
+    stereo = normalize(stereo, 0.55)
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = os.path.join(tmp, name + ".wav")
+        wavfile.write(wav, SR, (stereo * 32767).astype(np.int16))
+        out = os.path.join(OUT, name + ".m4a")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", wav, "-c:a", "aac", "-b:a", "112k", out], check=True)
+    print(f"  {name}: {total:.0f} s loop")
+
 def make_music():
-    # Title and space: warm and floaty.
-    make_lofi("music-title", 74, [["F3", "A3", "C4", "E4"], ["E3", "G3", "B3", "D4"], ["D3", "F3", "A3", "C4", "E4"], ["C3", "E3", "G3", "B3"]],
-              seed=11, scale=["C4", "D4", "E4", "G4", "A4"], lead=0.4)
-    # Wolfie World: sunny, a little bouncy.
-    make_lofi("music-wolfie-world", 82, [["C3", "E3", "G3", "B3"], ["A2", "C3", "E3", "G3"], ["D3", "F3", "A3", "C4"], ["G2", "B2", "D3", "F3"]],
-              seed=21, scale=["C4", "D4", "E4", "G4", "A4"], lead=0.5, bright=3000)
-    # Pup Moon: slow and dreamy.
-    make_lofi("music-pup-moon", 68, [["D#3", "G3", "A#3", "D4"], ["C3", "D#3", "G3", "A#3", "D4"], ["G#2", "C3", "D#3", "G3"], ["A#2", "D3", "F3", "G3"]],
-              seed=31, scale=["D#4", "F4", "G4", "A#4", "C5"], lead=0.35, swing=0.64, bright=2000)
-    # Glimmer: a bit mysterious, with a walking bass.
-    make_lofi("music-glimmer", 86, [["D3", "F3", "A3", "C4", "E4"], ["G2", "B2", "D3", "F3"], ["E3", "G3", "B3", "D4"], ["A2", "C#3", "E3", "G3"]],
-              seed=41, scale=["D4", "E4", "F4", "A4", "C5"], lead=0.45, bright=2800)
+    # The title, and six loops that take turns while you play.
+    make_ambient("music-title", 66, [["F3", "A3", "C4", "E4"], ["E3", "G3", "B3", "D4"], ["D3", "F3", "A3", "C4"], ["C3", "E3", "G3", "B3"]],
+                 seed=11, scale=["C4", "E4", "G4", "A4"], notes=0.2)
+    make_ambient("ambient-1", 64, [["C3", "E3", "G3", "B3"], ["A2", "C3", "E3", "G3"], ["F2", "A2", "C3", "E3"], ["G2", "B2", "D3", "A3"]],
+                 seed=101, scale=["C4", "D4", "E4", "G4", "A4"], beat=True, notes=0.2)
+    make_ambient("ambient-2", 58, [["D3", "F#3", "A3", "C#4"], ["B2", "D3", "F#3", "A3"], ["G2", "B2", "D3", "F#3"], ["A2", "C#3", "E3", "B3"]],
+                 seed=102, scale=["D4", "E4", "F#4", "A4", "B4"], notes=0.18, warm=900)
+    make_ambient("ambient-3", 70, [["A2", "C3", "E3", "G3"], ["D3", "F3", "A3", "C4"], ["G2", "B2", "D3", "F3"], ["C3", "E3", "G3", "B3"]],
+                 seed=103, scale=["A4", "C5", "D5", "E5"], beat=True, notes=0.15, warm=1300)
+    make_ambient("ambient-4", 54, [["D#3", "G3", "A#3", "D4"], ["C3", "D#3", "G3", "A#3"], ["G#2", "C3", "D#3", "G3"], ["A#2", "D3", "F3", "A3"]],
+                 seed=104, scale=["D#4", "F4", "G4", "A#4"], notes=0.22, warm=850)
+    make_ambient("ambient-5", 62, [["E3", "G#3", "B3", "D#4"], ["C#3", "E3", "G#3", "B3"], ["A2", "C#3", "E3", "G#3"], ["B2", "D#3", "F#3", "A#3"]],
+                 seed=105, scale=["E4", "F#4", "G#4", "B4", "C#5"], beat=True, notes=0.18)
+    make_ambient("ambient-6", 56, [["F3", "A3", "C4", "E4"], ["D3", "F3", "A3", "C4"], ["A#2", "D3", "F3", "A3"], ["C3", "E3", "G3", "A#3"]],
+                 seed=106, scale=["F4", "G4", "A4", "C5", "D5"], notes=0.2, warm=1000)
 
 
 if __name__ == "__main__":
