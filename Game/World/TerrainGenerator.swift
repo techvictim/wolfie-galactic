@@ -71,6 +71,7 @@ struct TerrainGenerator: Sendable {
     /// Highways run along the edges of the big settlement cells; every settlement has roads out
     /// to them, and a ring road around it.
     func road(_ x: Int, _ z: Int) -> RoadSpot? {
+        if planet.isStation { return nil }
         let reach = TerrainGenerator.roadReach
         let cell = TerrainGenerator.settlementCell
         var best: RoadSpot?
@@ -149,6 +150,7 @@ struct TerrainGenerator: Sendable {
 
     /// Ground height: the first empty block above the terrain in this column.
     func height(_ x: Int, _ z: Int) -> Int {
+        if planet.isStation { return StationPlan.height(x, z) }
         var h = baseHeight(x, z) + craterOffset(x, z)
         // Roads: flat across, gentle along, blending into the land at their edges.
         if let spot = road(x, z) {
@@ -201,6 +203,13 @@ struct TerrainGenerator: Sendable {
         let x0 = key.x * s
         let z0 = key.z * s
         let pad = TerrainGenerator.pad
+        if planet.isStation {
+            // A space station: nothing but what was built.
+            for piece in StationPlan.pieces(x0: x0, z0: z0, size: s) {
+                paint(piece, into: &blocks, x0: x0, z0: z0)
+            }
+            return blocks
+        }
 
         func put(_ x: Int, _ y: Int, _ z: Int, _ id: UInt8, onlyAir: Bool) {
             let lx = x - x0
@@ -283,19 +292,7 @@ struct TerrainGenerator: Sendable {
 
         // Cities, bases and mines.
         for piece in settlementPieces(x0: x0, z0: z0, size: s) {
-            let yRange = max(0, piece.min.y)..<min(World.height, piece.max.y)
-            let zRange = max(piece.min.z, z0)..<min(piece.max.z, z0 + s)
-            let xRange = max(piece.min.x, x0)..<min(piece.max.x, x0 + s)
-            guard !yRange.isEmpty, !zRange.isEmpty, !xRange.isEmpty else { continue }
-            for y in yRange {
-                for z in zRange {
-                    for x in xRange {
-                        if let id = piece.paint(x, y, z) {
-                            blocks[TerrainGenerator.index(x - x0, y, z - z0)] = id
-                        }
-                    }
-                }
-            }
+            paint(piece, into: &blocks, x0: x0, z0: z0)
         }
 
         // A row of crate stacks in front of where you start, to try the laser on.
@@ -306,5 +303,22 @@ struct TerrainGenerator: Sendable {
             for y in top..<(top + crateHeight) { put(x, y, z, B.crate, onlyAir: false) }
         }
         return blocks
+    }
+
+    private func paint(_ piece: Settlement.Piece, into blocks: inout [UInt8], x0: Int, z0: Int) {
+        let s = World.chunkSize
+        let yRange = max(0, piece.min.y)..<min(World.height, piece.max.y)
+        let zRange = max(piece.min.z, z0)..<min(piece.max.z, z0 + s)
+        let xRange = max(piece.min.x, x0)..<min(piece.max.x, x0 + s)
+        guard !yRange.isEmpty, !zRange.isEmpty, !xRange.isEmpty else { return }
+        for y in yRange {
+            for z in zRange {
+                for x in xRange {
+                    if let id = piece.paint(x, y, z) {
+                        blocks[TerrainGenerator.index(x - x0, y, z - z0)] = id
+                    }
+                }
+            }
+        }
     }
 }

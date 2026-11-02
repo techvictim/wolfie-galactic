@@ -198,6 +198,71 @@
           "yaw": 0
         }
       ]
+    },
+    {
+      "id": "wolfie-station",
+      "name": "Wolfie Station",
+      "kind": "Space station",
+      "seed": 5150,
+      "gravity": 14,
+      "sky": "#0b0a22",
+      "stars": true,
+      "station": true,
+      "mapColors": [
+        "#9aa3b8",
+        "#2a2f3d"
+      ],
+      "terrain": {
+        "base": 40,
+        "amplitude": 0,
+        "frequency": 0.03,
+        "surface": 9,
+        "under": 9,
+        "stone": 9,
+        "low": 0,
+        "lowLevel": 0,
+        "trunk": 0,
+        "leaves": 0
+      },
+      "features": {
+        "trees": 0,
+        "crystals": 0,
+        "crates": 0,
+        "craters": 0
+      },
+      "skyBodies": [
+        {
+          "color": "#4fd1b0",
+          "model": "space-wolfie-world",
+          "size": 150,
+          "direction": [
+            0.15,
+            -0.55,
+            -0.82
+          ]
+        },
+        {
+          "color": "#d4d7ea",
+          "model": "space-pup-moon",
+          "size": 10,
+          "direction": [
+            0.7,
+            0.25,
+            -0.6
+          ]
+        },
+        {
+          "color": "#ff9a6b",
+          "model": "space-glimmer",
+          "size": 8,
+          "direction": [
+            -0.5,
+            0.3,
+            0.8
+          ]
+        }
+      ],
+      "vehicles": []
     }
   ]
 }

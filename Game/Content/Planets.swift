@@ -67,6 +67,10 @@ struct Planet: Codable, Identifiable, Sendable {
     let features: Features
     let skyBodies: [SkyBody]
     let vehicles: [VehicleSpot]?
+    /// A space station rather than a planet: a deck floating in space (see StationPlan).
+    var station: Bool?
+
+    var isStation: Bool { station == true }
 }
 
 struct PlanetFile: Codable {
@@ -77,15 +81,21 @@ struct PlanetFile: Codable {
 final class PlanetCatalog {
     static let shared = PlanetCatalog()
 
+    /// Planets you can fly to on the star map (not the space station).
     let planets: [Planet]
+    /// Everything, the station too.
+    let all: [Planet]
     let homeID: String
+    /// The space station orbiting the home planet, if there is one.
+    var stationID: String? { all.first { $0.isStation }?.id }
 
     private init() {
         if let url = Bundle.main.url(forResource: "planets", withExtension: "json"),
            let data = try? Data(contentsOf: url),
            let file = try? JSONDecoder().decode(PlanetFile.self, from: data),
            !file.planets.isEmpty {
-            planets = file.planets
+            all = file.planets
+            planets = file.planets.filter { !$0.isStation }
             homeID = file.home
         } else {
             let fallback = Planet(
@@ -98,6 +108,7 @@ final class PlanetCatalog {
                 vehicles: nil
             )
             planets = [fallback]
+            all = [fallback]
             homeID = fallback.id
         }
     }
@@ -107,7 +118,7 @@ final class PlanetCatalog {
     }
 
     func planet(id: String) -> Planet? {
-        planets.first { $0.id == id }
+        all.first { $0.id == id }
     }
 
     func index(of id: String) -> Int {

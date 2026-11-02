@@ -773,3 +773,132 @@ enum MilitaryLayout {
         TerrainGenerator.militaryBase &- SIMD2(repeating: size / 2)
     }
 }
+
+// MARK: - Wolfie Station
+
+/// The space station over Wolfie World, as a little world of its own: a deck floating in space
+/// with a big hangar you can fly into, ships parked inside and more coming and going.
+enum StationPlan {
+    /// The top of the deck: you walk at this height.
+    static let deck = 40
+    /// The hangar: open at both ends (north and south) for ships to fly through.
+    static let hangarHalfWidth = 32
+    static let hangarHalfDepth = 26
+    static let hangarRoof = deck + 26
+    /// surfaceY looks down from here, so the hangar roof isn't taken for the ground.
+    static let scanTop = deck + 24
+    /// Pads outside the hangar where visiting ships land.
+    static let trafficPads: [SIMD2<Int>] = [SIMD2(46, 30), SIMD2(-46, 34)]
+    /// Parked inside the hangar: (kind, x, z, which way it faces).
+    static let parking: [(String, Int, Int, Float)] = [
+        ("comet", 14, -12, .pi), ("hauler", 14, 12, .pi), ("zoomer", -13, -14, .pi),
+        ("hoverbike", 0, 20, .pi), ("buggy", -24, 18, .pi),
+    ]
+
+    static func onDeck(_ x: Int, _ z: Int) -> Bool {
+        abs(x) <= 64 && abs(z) <= 64 && abs(x) + abs(z) <= 100
+    }
+
+    /// The ground height (first empty block) of a column; 0 off the edge, where there's only space.
+    static func height(_ x: Int, _ z: Int) -> Int {
+        onDeck(x, z) ? deck : 0
+    }
+
+    static func pieces(x0: Int, z0: Int, size: Int) -> [Settlement.Piece] {
+        Settlements.station.filter { $0.max.x > x0 && $0.min.x < x0 + size && $0.max.z > z0 && $0.min.z < z0 + size }
+    }
+}
+
+extension Settlements {
+    static let station: [Settlement.Piece] = {
+        let d = StationPlan.deck
+        let hw = StationPlan.hangarHalfWidth, hd = StationPlan.hangarHalfDepth, roof = StationPlan.hangarRoof
+        var pieces: [Settlement.Piece] = []
+
+        // The deck: four blocks thick, with a grid of light lines on top and lamps underneath.
+        pieces.append(box(SIMD3(-65, d - 4, -65), SIMD3(66, d + 2, 66), far: d, farBlock: B.metal) { x, y, z in
+            guard StationPlan.onDeck(x, z) else { return nil }
+            let edge = !StationPlan.onDeck(x + 1, z) || !StationPlan.onDeck(x - 1, z) || !StationPlan.onDeck(x, z + 1) || !StationPlan.onDeck(x, z - 1)
+            let k = y - d
+            if k >= 0 {
+                // A glass rail round the edge, on metal posts, so nobody walks off into space.
+                guard edge else { return nil }
+                return (x + z) % 4 == 0 ? (k == 1 ? B.lamp : B.metal) : SB.domeGlass
+            }
+            if k == -1 {
+                if edge { return SB.neonCyan }
+                if floorMod(x, 16) == 0 && floorMod(z, 16) == 0 { return B.lamp }
+                if floorMod(x, 8) == 0 || floorMod(z, 8) == 0 { return SB.white }
+                return B.metal
+            }
+            if k == -4 { return floorMod(x, 6) == 0 && floorMod(z, 6) == 0 ? B.lamp : B.metal }
+            return edge ? SB.white : B.metal
+        })
+
+        // The station's spine, hanging down below the deck, with glowing rings.
+        pieces.append(box(SIMD3(-9, d - 30, -9), SIMD3(10, d - 4, 10), far: d - 4, farBlock: B.metal) { x, y, z in
+            let k = d - 4 - y            // 1 ... 26 down
+            let r = 8 - k / 4
+            let dist = (Float(x * x + z * z)).squareRoot()
+            guard dist <= Float(max(2, r)) + 0.4 else { return nil }
+            if dist > Float(max(2, r)) - 0.8 { return k % 5 == 0 ? SB.neonCyan : B.metal }
+            return k == 26 ? B.lamp : nil
+        })
+
+        // The hangar: tall walls with windows out to space, a roof with skylights, open ends.
+        pieces.append(box(SIMD3(-hw, d, -hd), SIMD3(hw + 1, roof + 1, hd + 1), far: roof + 1, farBlock: B.metal) { x, y, z in
+            let wall = abs(x) == hw
+            let endFrame = abs(z) == hd
+            let k = y - d
+            if y == roof {
+                if endFrame { return SB.neonPink }
+                return floorMod(x, 8) < 2 && abs(x) < hw - 2 ? SB.domeGlass : B.metal
+            }
+            if wall {
+                if k == roof - d - 2 { return SB.neonCyan }
+                if k >= 6 && k <= 12 && abs(z) < hd - 1 { return floorMod(z, 6) == 0 ? B.metal : SB.nightGlass }
+                return endFrame ? SB.white : B.metal
+            }
+            // Beams across the open ends.
+            if endFrame && y == roof - 1 { return SB.white }
+            // Lights hanging under the roof.
+            if y == roof - 1 && floorMod(x, 12) == 0 && floorMod(z, 12) == 0 { return B.lamp }
+            return nil
+        })
+        // Glowing guide lines on the hangar floor, leading ships in.
+        pieces.append(box(SIMD3(-2, d - 1, -hd), SIMD3(3, d, hd + 1)) { x, _, z in
+            abs(x) == 2 && floorMod(z, 4) < 2 ? SB.neonCyan : nil
+        })
+
+        // Pads: the starship's, one for each parked ship, and two outside for visitors.
+        let pad = TerrainGenerator.pad
+        pieces.append(landingPad(x0: pad.x - 5, z0: pad.y - 5, size: 11, ground: d))
+        for (kind, x, z, _) in StationPlan.parking where kind != "hoverbike" && kind != "buggy" {
+            pieces.append(landingPad(x0: x - 5, z0: z - 5, size: 11, ground: d))
+        }
+        for p in StationPlan.trafficPads {
+            pieces.append(landingPad(x0: p.x - 6, z0: p.y - 6, size: 13, ground: d))
+        }
+
+        // Outside: the control tower, a greenhouse dome, solar arrays and an antenna mast.
+        pieces.append(roundTower(cx: 44, cz: -42, r: 6, ground: d, height: 22))
+        pieces.append(dome(cx: -44, cz: -40, r: 10, ground: d, floor: 13))
+        pieces.append(box(SIMD3(-50, d, -46), SIMD3(-37, d + 6, -33)) { x, y, z in
+            // Glowing plants under the dome.
+            if floorMod(x * 3 + z, 5) == 0 && y <= d + 1 { return 17 }
+            if floorMod(x + z * 3, 7) == 0 && y < d + 4 { return 16 }
+            return nil
+        })
+        for row in 0..<3 {
+            let sz = 40 + row * 5
+            pieces.append(box(SIMD3(-16, d, sz), SIMD3(17, d + 3, sz + 3)) { x, y, z in
+                if y == d + 2 { return z < sz + 2 ? SB.solar : nil }
+                return floorMod(x, 6) == 0 && z == sz ? B.metal : nil
+            })
+        }
+        pieces.append(box(SIMD3(54, d, -2), SIMD3(55, d + 30, -1), far: d + 30, farBlock: B.metal) { _, y, _ in
+            y == d + 29 ? B.lamp : (floorMod(y, 6) == 0 ? SB.neonPink : B.metal)
+        })
+        return pieces
+    }()
+}

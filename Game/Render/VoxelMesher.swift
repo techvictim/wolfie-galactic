@@ -204,6 +204,7 @@ enum FarMesher {
                 if detailed.contains(World.key(x: bx, z: bz)) { continue }
                 let index = (j + 1) * span + (i + 1)
                 let h = heights[index]
+                if h <= 0 { continue }   // nothing here (off the edge of the space station)
                 let id = Int(tops[index])
                 let topY = Float(h) - sink
                 let origin = SIMD3<Float>(Float(i * cell), 0, Float(j * cell))

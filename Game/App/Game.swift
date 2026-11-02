@@ -151,6 +151,11 @@ final class Game {
     @ObservationIgnored let roboCats = RoboCats()
     /// Troops and drones at the military base.
     @ObservationIgnored let baseLife = BaseLife()
+    /// Ships coming and going at Wolfie Station, inside it and out in space.
+    @ObservationIgnored let traffic = ShipTraffic()
+    @ObservationIgnored let spaceTraffic = ShipTraffic()
+    @ObservationIgnored var stationHinted = false
+    @ObservationIgnored var enteringStation = false
     /// Blocks falling down (see Game+Falling.swift).
     @ObservationIgnored let falling = FallingBlocks()
 
@@ -307,15 +312,18 @@ final class Game {
         root.addChild(armory.root)
         root.addChild(roboCats.root)
         root.addChild(baseLife.root)
+        root.addChild(traffic.root)
         root.addChild(falling.root)
         root.addChild(pickups.root)
         root.addChild(ghost)
         root.addChild(space.root)
+        space.root.addChild(spaceTraffic.root)
         root.addChild(space.far)
         camera.addChild(space.warp)
         space.root.isEnabled = false
         space.far.isEnabled = false
         space.warp.isEnabled = false
+        setupSpaceTraffic()
 
         // Laser beam: a bright core inside a soft glow, stretched along its length each frame.
         let core = ModelEntity(mesh: .generateBox(width: 0.05, height: 0.05, depth: 1), materials: [Game.glow(SIMD3<Float>(1, 0.85, 0.97), opacity: 1)])
@@ -371,6 +379,7 @@ final class Game {
 
         placeVehicles()
         baseLife.setup(world: world, planet: planet)
+        setupStationTraffic()
         syncCamera()
     }
 
@@ -474,6 +483,7 @@ final class Game {
             updateFalling(dt: dt)
             updateDayCycle(dt: dt)
             baseLife.update(dt: dt, viewer: camera.position)
+            updateStation(dt: dt)
         } else {
             stopGlitchHum()
         }

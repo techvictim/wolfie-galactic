@@ -43,6 +43,9 @@ extension Game {
             let ground: [(VehicleKind, Int)] = [(.rover, 30), (.buggy, 36), (.hoverbike, 42)]
             for (kind, x) in ground { add(kind, at: o, dx: x, dz: 15, yaw: .pi, id: "\(kind.rawValue)-base") }
         }
+        if planet.isStation {
+            placeStationVehicles { kind, spot, yaw, id in add(kind, at: spot, yaw: yaw, id: id) }
+        }
         // Vehicles this planet starts with (planets.json "vehicles").
         for spot in planet.vehicles ?? [] {
             guard let kind = VehicleKind(rawValue: spot.kind) else { continue }

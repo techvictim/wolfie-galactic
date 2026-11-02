@@ -18,6 +18,11 @@ extension Game {
 
     /// While flying on a planet: the sky darkens as you climb, then you're in space.
     func checkAltitude(_ v: Vehicle) {
+        if planet.isStation {
+            // Already in space: fly out of the station and you're on your way.
+            if leftStation(v), !spaceTransition { enterSpace(from: v) }
+            return
+        }
         let darkness = min(max((v.position.y - Game.skyFadeStart) / (Game.spaceHeight - Game.skyFadeStart), 0), 1)
         applySky(darkness: darkness)
         guard v.position.y >= Game.spaceHeight, !spaceTransition else { return }
@@ -35,20 +40,37 @@ extension Game {
         save()
 
         place = .space
-        space.setPlanet(planet.id)
+        // The station orbits Wolfie World: leaving it puts you in space beside it.
+        let fromStation = planet.isStation
+        space.setPlanet(fromStation ? PlanetCatalog.shared.homeID : planet.id)
         space.showDocks(docks)
         setSurfaceVisible(false)
+        spaceTraffic.root.isEnabled = space.planetID == PlanetCatalog.shared.homeID
 
-        // Come out above the planet, climbing away from it.
-        let r = space.planetRadius
-        var ship = Vehicle(kind: v.kind, position: SIMD3<Float>(0, r + 30, r * 0.35), yaw: v.yaw, id: v.id)
-        ship.pitch = 0.45
-        ship.speed = v.kind.topSpeed
+        var ship: Vehicle
+        if fromStation {
+            // Out of the hangar, heading away from the station the way you were going.
+            let away = SIMD3<Float>(-sin(v.yaw), 0, -cos(v.yaw))
+            ship = Vehicle(kind: v.kind, position: Game.stationCenter + away * 70 + SIMD3(0, 6, 0), yaw: v.yaw, id: v.id)
+            ship.pitch = 0.05
+            ship.speed = v.kind.topSpeed * 0.7
+        } else {
+            // Come out above the planet, climbing away from it.
+            let r = space.planetRadius
+            ship = Vehicle(kind: v.kind, position: SIMD3<Float>(0, r + 30, r * 0.35), yaw: v.yaw, id: v.id)
+            ship.pitch = 0.45
+            ship.speed = v.kind.topSpeed
+        }
         spaceShip = ship
         chaseEye = nil
+        stationHinted = fromStation
         Sound.shared.play("launch", volume: 0.6)
-        show("You're in space! Look back at \(planet.name)")
-        Speaker.shared.say("Space!")
+        if fromStation {
+            show("Back in space! Wolfie World is below you")
+        } else {
+            show("You're in space! Look back at \(planet.name)")
+            Speaker.shared.say("Space!")
+        }
         spaceTransition = false
     }
 
@@ -63,6 +85,7 @@ extension Game {
         }
         space.root.isEnabled = !visible
         space.far.isEnabled = !visible
+        traffic.root.isEnabled = visible
         showVehicles()
         applySky(darkness: visible ? 0 : 1)
     }
@@ -118,6 +141,12 @@ extension Game {
             if messageTimer <= 0 { show("Too far! Turn back toward the planets") }
         }
 
+        spaceTraffic.update(dt: dt)
+        if checkStationEntry(v) {
+            spaceShip = v
+            space.showShip(v)
+        }
+
         let thrust = min(1, abs(v.speed) / (v.kind.topSpeed * 2))
         Sound.shared.startLoop("ship-engine", channel: "engine", volume: 0.15, pitch: 0.8)
         Sound.shared.setLoop(channel: "engine", volume: 0.14 + thrust * 0.3, pitch: 0.7 + thrust * 0.7)
@@ -130,10 +159,11 @@ extension Game {
 
         // Fly into the planet's air to come down through it. The ship never touches the
         // planet model itself; the clouds take over first.
-        if distance < space.atmosphereRadius && !spaceTransition {
-            enterAtmosphere(v)
+        if distance < space.atmosphereRadius && !spaceTransition,
+           let destination = PlanetCatalog.shared.planet(id: space.planetID) {
+            enterAtmosphere(v, to: destination)
         }
-        if entryTime >= 0 {
+        if entryTime >= 0 && !enteringStation {
             let floor = space.planetRadius * 1.08
             if distance < floor, distance > 0.01 { v.position = v.position / distance * floor }
             spaceShip = v
@@ -244,8 +274,7 @@ extension Game {
 
     /// Down through the atmosphere: the ship glows hot and shakes, clouds rush in until they fill
     /// the view, then clear to show the planet's sky, still dark up high, brightening as you dive.
-    private func enterAtmosphere(_ v: Vehicle) {
-        guard let destination = PlanetCatalog.shared.planet(id: space.planetID) else { return }
+    func enterAtmosphere(_ v: Vehicle, to destination: Planet) {
         spaceTransition = true
         entryGlow = true
         entryTime = 0
@@ -288,6 +317,7 @@ extension Game {
         place = .surface
         spaceShip = nil
         hyperTarget = nil
+        enteringStation = false
         if newPlanet {
             // Load the planet (this also puts its own starship on its pad).
             land(on: destination, world: next)
@@ -299,6 +329,12 @@ extension Game {
         var ship = Vehicle(kind: kind, position: SIMD3<Float>(Float(pad.x), Game.spaceHeight - 10, Float(pad.y) + 150), yaw: 0, id: arriving.id)
         ship.pitch = -0.38
         ship.speed = kind.topSpeed * 0.8
+        if destination.isStation {
+            // Gliding in toward the hangar's open south end.
+            ship.position = SIMD3<Float>(0, Float(StationPlan.deck) + 16, 150)
+            ship.pitch = -0.03
+            ship.speed = kind.topSpeed * 0.45
+        }
         ship.onGround = false
         // If the planet's own starship was waiting on the pad, yours (with the same id) takes its place.
         vehicles[ship.id] = ship
@@ -309,7 +345,7 @@ extension Game {
         applySky(darkness: min(1, max(0, (ship.position.y - Game.skyFadeStart) / (Game.spaceHeight - Game.skyFadeStart))))
         if session != .joined { WorldStore.lastPlanet = destination.id }
         shareVehicle(ship, on: destination.id, driver: myID)
-        show("Welcome to \(destination.name)!")
+        show(destination.isStation ? "Welcome to Wolfie Station! Land in the hangar, or take another ship" : "Welcome to \(destination.name)!")
     }
 
     /// Back to the ground without the show, e.g. when going to the title screen from space.

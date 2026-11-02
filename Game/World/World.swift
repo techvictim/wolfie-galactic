@@ -157,7 +157,8 @@ final class World {
 
     /// The first empty y above the highest solid block in a column.
     func surfaceY(x: Int, z: Int) -> Int {
-        var y = World.height - 1
+        // On the station, look from under the hangar roof.
+        var y = generator.planet.isStation ? StationPlan.scanTop : World.height - 1
         while y >= 0 && block(x, y, z) == B.air { y -= 1 }
         return y + 1
     }
