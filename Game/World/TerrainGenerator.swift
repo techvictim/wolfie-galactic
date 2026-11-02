@@ -41,7 +41,72 @@ struct TerrainGenerator: Sendable {
 
     private func baseHeight(_ x: Int, _ z: Int) -> Float {
         let t = planet.terrain
-        return Float(t.base) + noise.fbm(Float(x) * t.frequency, Float(z) * t.frequency) * t.amplitude
+        let n = noise.fbm(Float(x) * t.frequency, Float(z) * t.frequency)
+        // Plains: wide stretches where the hills settle down, good for driving.
+        let flat = plains(x, z)
+        return Float(t.base) + ((n - 0.5) * (1 - 0.85 * flat) + 0.5) * t.amplitude
+    }
+
+    // MARK: Plains and roads
+
+    /// 0 in the hills, 1 out on the plains.
+    func plains(_ x: Int, _ z: Int) -> Float {
+        let p = noise.fbm(Float(x) * 0.0045 + 311, Float(z) * 0.0045 - 157)
+        return min(1, max(0, (p - 0.5) / 0.08))
+    }
+
+    /// A road near this column: how far from its middle, how far along it, the line it follows
+    /// (x for roads running north-south, z for east-west), and the height to keep it at, if set.
+    struct RoadSpot {
+        let distance: Int
+        let along: Int
+        let alongX: Bool
+        let line: Int
+        let ground: Float?
+    }
+
+    static let roadHalfWidth = 3
+    private static let roadReach = 9
+
+    /// Highways run along the edges of the big settlement cells; every settlement has roads out
+    /// to them, and a ring road around it.
+    func road(_ x: Int, _ z: Int) -> RoadSpot? {
+        let reach = TerrainGenerator.roadReach
+        let cell = TerrainGenerator.settlementCell
+        var best: RoadSpot?
+        func consider(_ spot: RoadSpot) {
+            if spot.distance <= reach && (best == nil || spot.distance < best!.distance) { best = spot }
+        }
+        let mx = floorMod(x, cell), mz = floorMod(z, cell)
+        // Highways.
+        consider(RoadSpot(distance: min(mx, cell - mx), along: z, alongX: false, line: mx < cell / 2 ? x - mx : x - mx + cell, ground: nil))
+        consider(RoadSpot(distance: min(mz, cell - mz), along: x, alongX: true, line: mz < cell / 2 ? z - mz : z - mz + cell, ground: nil))
+        // Roads out of the settlement in this cell, and around it.
+        if planet.features.settlement != nil, let site = settlement(cellX: floorDiv(x, cell), cellZ: floorDiv(z, cell)) {
+            let cx = site.center.x, cz = site.center.y
+            let square = site.kind == .city
+            let d = square ? max(abs(x - cx), abs(z - cz))
+                           : Int(simd_distance(SIMD2<Float>(Float(x), Float(z)), SIMD2<Float>(Float(cx), Float(cz))))
+            if d <= site.radius + 1 { return nil }     // the settlement's own streets
+            let near = d < site.radius + 26 ? Float(site.ground) : nil
+            consider(RoadSpot(distance: abs(z - cz), along: x, alongX: true, line: cz, ground: near))
+            consider(RoadSpot(distance: abs(x - cx), along: z, alongX: false, line: cx, ground: near))
+            let ring = site.radius + 6
+            consider(RoadSpot(distance: abs(d - ring), along: x + z, alongX: true, line: 0, ground: Float(site.ground)))
+        }
+        return best
+    }
+
+    /// The road's height: the land, smoothed along the road so hills become gentle slopes.
+    private func roadHeight(_ spot: RoadSpot) -> Float {
+        if let ground = spot.ground { return ground }
+        var sum: Float = 0
+        for k in -2...2 {
+            let a = (spot.along / 8) * 8 + k * 10
+            sum += spot.alongX ? baseHeight(a, spot.line) : baseHeight(spot.line, a)
+        }
+        // Stay put between samples, so the road is steady.
+        return (sum / 5).rounded()
     }
 
     private static let craterCell = 24
@@ -79,6 +144,17 @@ struct TerrainGenerator: Sendable {
     /// Ground height: the first empty block above the terrain in this column.
     func height(_ x: Int, _ z: Int) -> Int {
         var h = baseHeight(x, z) + craterOffset(x, z)
+        // Roads: flat across, gentle along, blending into the land at their edges.
+        if let spot = road(x, z) {
+            let target = roadHeight(spot)
+            let edge = TerrainGenerator.roadHalfWidth
+            if spot.distance <= edge {
+                h = target
+            } else {
+                let k = Float(spot.distance - edge) / Float(TerrainGenerator.roadReach - edge)
+                h = target * (1 - k) + h * k
+            }
+        }
         // Cities and bases sit on flat ground.
         h = settlementHeight(x, z, natural: h)
         // Flatten the ground around the landing pad.
@@ -91,6 +167,12 @@ struct TerrainGenerator: Sendable {
             h = Float(padHeight) * (1 - k) + h * k
         }
         return max(3, min(World.height - 20, Int(h.rounded())))
+    }
+
+    /// The top block of a column, with roads, as the far-away terrain shows it.
+    func surfaceBlock(x: Int, z: Int, height h: Int) -> UInt8 {
+        if let spot = road(x, z), spot.distance <= TerrainGenerator.roadHalfWidth { return SB.road }
+        return surfaceBlock(height: h)
     }
 
     /// The top block of a column, as the far-away terrain shows it.
@@ -141,6 +223,11 @@ struct TerrainGenerator: Sendable {
                     }
                     blocks[TerrainGenerator.index(lx, y, lz)] = id
                 }
+                // Road: asphalt with a dashed yellow line down the middle.
+                if let spot = road(x, z), spot.distance <= TerrainGenerator.roadHalfWidth, h > 0 {
+                    let line = spot.distance == 0 && floorMod(spot.along, 8) < 4
+                    blocks[TerrainGenerator.index(lx, h - 1, lz)] = line ? SB.roadLine : SB.road
+                }
                 let padDistance = max(abs(x - pad.x), abs(z - pad.y))
                 if padDistance <= 5 {
                     let corner = abs(x - pad.x) == 5 && abs(z - pad.y) == 5
@@ -157,6 +244,9 @@ struct TerrainGenerator: Sendable {
                 if abs(x - TerrainGenerator.spawn.x) < 7 && abs(z - TerrainGenerator.spawn.y) < 7 { continue }
                 if max(abs(x - pad.x), abs(z - pad.y)) <= 8 { continue }
                 if insideSettlement(x, z) { continue }
+                // Nothing grows on or right beside roads, and the plains are open.
+                if let spot = road(x, z), spot.distance <= 6 { continue }
+                if plains(x, z) > 0.6 { continue }
                 let roll = noise.hash(x &* 7 &+ 3, z &* 13 &+ 5)
                 guard roll < f.trees + f.crystals + f.crates else { continue }
                 let top = height(x, z)

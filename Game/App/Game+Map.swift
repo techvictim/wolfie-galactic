@@ -271,7 +271,7 @@ enum MapPainter {
                 let x = origin.x + i * step + step / 2
                 let z = origin.y + j * step + step / 2
                 var h = generator.height(x, z)
-                var id = generator.surfaceBlock(height: h)
+                var id = generator.surfaceBlock(x: x, z: z, height: h)
                 if let building = generator.farTop(x, z), building.height > h {
                     h = building.height
                     id = building.block

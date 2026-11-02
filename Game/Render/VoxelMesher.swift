@@ -186,7 +186,7 @@ enum FarMesher {
                     }
                 } else {
                     heights[index] = h
-                    tops[index] = generator.surfaceBlock(height: h)
+                    tops[index] = generator.surfaceBlock(x: x + cell / 2, z: z + cell / 2, height: h)
                 }
             }
         }
