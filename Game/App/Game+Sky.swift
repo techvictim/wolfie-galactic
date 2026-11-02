@@ -64,8 +64,7 @@ extension Game {
         // Clouds pick up the light too.
         let cloud = simd_mix(SIMD3<Float>(0.55, 0.58, 0.72), SIMD3(1, 1, 1), SIMD3(repeating: dayLight))
         let tinted = simd_mix(cloud, SIMD3(1, 0.78, 0.7), SIMD3(repeating: glow * 0.5))
-        var m = UnlitMaterial(color: Game.color(tinted))
-        m.blending = .transparent(opacity: .init(floatLiteral: 0.82))
+        let m = Shots.material((tinted * 20).rounded(.toNearestOrAwayFromZero) / 20, opacity: 0.82)
         for case let c as ModelEntity in clouds.children { c.model?.materials = [m] }
     }
 
@@ -90,7 +89,7 @@ extension Game {
     func moveClouds(_ eye: SIMD3<Float>) {
         guard !clouds.children.isEmpty else { return }
         let tile = Game.cloudTile
-        let drift = clock * 1.6
+        let drift = dayClock * 1.6
         let height: Float = 118
         let baseX = floor((eye.x - drift) / tile) * tile + drift
         let baseZ = floor(eye.z / tile) * tile
