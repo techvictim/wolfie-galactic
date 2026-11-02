@@ -169,7 +169,8 @@
             -0.3,
             0.3,
             -0.9
-          ]
+          ],
+          "model": "space-pup-moon"
         },
         {
           "color": "#4fd1b0",

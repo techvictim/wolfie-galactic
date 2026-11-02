@@ -21,9 +21,18 @@ final class SpaceScene {
     private var atmosphere = Entity()
 
     /// Where another planet hangs in the sky, seen from here.
+    /// The same way it hangs in the sky of the planet you just left, so flying toward it in
+    /// the sky keeps it ahead of you in space.
     static func direction(of id: String) -> SIMD3<Float>? {
-        directions[id]
+        if let here = PlanetCatalog.shared.planet(id: viewFrom),
+           let body = here.skyBodies.first(where: { $0.model == "space-\(id)" }), body.direction.count == 3 {
+            return simd_normalize(SIMD3(body.direction[0], body.direction[1], body.direction[2]))
+        }
+        return directions[id]
     }
+
+    /// The planet being orbited, for directions.
+    private(set) static var viewFrom = ""
 
     /// Fly inside this and you start coming down through the atmosphere.
     var atmosphereRadius: Float { planetRadius * 1.22 }
@@ -72,6 +81,7 @@ final class SpaceScene {
     func setPlanet(_ id: String) {
         buildOnce()
         planetID = id
+        SpaceScene.viewFrom = id
         planetModel?.removeFromParent()
         if let holder = SpaceScene.ball("space-\(id)", voxel: SpaceScene.voxelScale),
            let size = DetailModels.size(named: "space-\(id)") {
@@ -96,7 +106,7 @@ final class SpaceScene {
         farPlanets.removeAll()
         for planet in PlanetCatalog.shared.planets where planet.id != id {
             guard let holder = SpaceScene.ball("space-\(planet.id)", voxel: 7) else { continue }
-            holder.position = (SpaceScene.directions[planet.id] ?? SIMD3(0, 0, -1)) * 1700
+            holder.position = (SpaceScene.direction(of: planet.id) ?? SIMD3(0, 0, -1)) * 1700
             far.addChild(holder)
             farPlanets[planet.id] = holder
         }

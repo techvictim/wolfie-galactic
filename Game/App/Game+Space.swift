@@ -57,8 +57,9 @@ extension Game {
         } else {
             // Come out above the planet, climbing away from it.
             let r = space.planetRadius
+            // Still heading the same way: whatever you flew toward in the sky is out there ahead.
             ship = Vehicle(kind: v.kind, position: SIMD3<Float>(0, r + 30, r * 0.35), yaw: v.yaw, id: v.id)
-            ship.pitch = 0.45
+            ship.pitch = min(max(v.pitch, 0.15), 1.0)
             ship.speed = v.kind.topSpeed
         }
         spaceShip = ship
@@ -86,6 +87,8 @@ extension Game {
         space.root.isEnabled = !visible
         space.far.isEnabled = !visible
         traffic.root.isEnabled = visible
+        // Clouds belong in a planet's air, not out in space.
+        clouds.isEnabled = visible
         showVehicles()
         applySky(darkness: visible ? 0 : 1)
     }

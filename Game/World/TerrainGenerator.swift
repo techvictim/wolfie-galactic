@@ -56,20 +56,39 @@ struct TerrainGenerator: Sendable {
     }
 
     /// A road near this column: how far from its middle, how far along it, the line it follows
-    /// (x for roads running north-south, z for east-west), and the height to keep it at, if set.
+    /// (z for roads running east-west, x for north-south), how much it winds, and what fixes its
+    /// height (a settlement it leads out of, or a set height).
     struct RoadSpot {
         let distance: Int
         let along: Int
         let alongX: Bool
         let line: Int
-        let ground: Float?
+        /// How far a winding road swings either side of its line, in blocks; 0 for straight.
+        var wind: Float = 0
+        var phase: Float = 0
+        var ground: Float? = nil
+        var site: Settlement? = nil
     }
 
     static let roadHalfWidth = 3
-    private static let roadReach = 9
+    /// How far out the land is graded to meet the road.
+    private static let roadReach = 16
+
+    /// A winding road's sideways swing at a spot along it, and how steeply it's turning.
+    private static func wiggle(_ a: Float, _ phase: Float) -> (offset: Float, slope: Float) {
+        let k1: Float = 2 * .pi / 400, k2: Float = 2 * .pi / 190
+        let offset = 0.65 * sin(a * k1 + phase) + 0.35 * sin(a * k2 + phase * 1.7)
+        let slope = 0.65 * k1 * cos(a * k1 + phase) + 0.35 * k2 * cos(a * k2 + phase * 1.7)
+        return (offset, slope)
+    }
+
+    /// The middle of a road (across it) at a spot along it.
+    private static func center(_ spot: RoadSpot, at a: Int) -> Float {
+        Float(spot.line) + spot.wind * wiggle(Float(a), spot.phase).offset
+    }
 
     /// Highways run along the edges of the big settlement cells; every settlement has roads out
-    /// to them, and a ring road around it.
+    /// to them and a ring road around it. Cells with no settlement get winding country roads.
     func road(_ x: Int, _ z: Int) -> RoadSpot? {
         if planet.isStation { return nil }
         let reach = TerrainGenerator.roadReach
@@ -79,40 +98,126 @@ struct TerrainGenerator: Sendable {
             if spot.distance <= reach && (best == nil || spot.distance < best!.distance) { best = spot }
         }
         let mx = floorMod(x, cell), mz = floorMod(z, cell)
+        let cx = floorDiv(x, cell), cz = floorDiv(z, cell)
         // Highways.
-        consider(RoadSpot(distance: min(mx, cell - mx), along: z, alongX: false, line: mx < cell / 2 ? x - mx : x - mx + cell, ground: nil))
-        consider(RoadSpot(distance: min(mz, cell - mz), along: x, alongX: true, line: mz < cell / 2 ? z - mz : z - mz + cell, ground: nil))
-        // Roads out of the settlement in this cell, and around it.
-        if planet.features.settlement != nil, let site = settlement(cellX: floorDiv(x, cell), cellZ: floorDiv(z, cell)) {
-            let cx = site.center.x, cz = site.center.y
-            let square = site.isSquare
-            let d = square ? max(abs(x - cx), abs(z - cz))
-                           : Int(simd_distance(SIMD2<Float>(Float(x), Float(z)), SIMD2<Float>(Float(cx), Float(cz))))
+        consider(RoadSpot(distance: min(mx, cell - mx), along: z, alongX: false, line: mx < cell / 2 ? x - mx : x - mx + cell))
+        consider(RoadSpot(distance: min(mz, cell - mz), along: x, alongX: true, line: mz < cell / 2 ? z - mz : z - mz + cell))
+        if planet.features.settlement != nil, let site = settlement(cellX: cx, cellZ: cz) {
+            // Roads out of the settlement in this cell, and around it.
+            let sx = site.center.x, sz = site.center.y
+            let d = site.isSquare ? max(abs(x - sx), abs(z - sz))
+                                  : Int(simd_distance(SIMD2<Float>(Float(x), Float(z)), SIMD2<Float>(Float(sx), Float(sz))))
             if d <= site.radius + 1 { return nil }     // the settlement's own streets
-            let near = d < site.radius + 26 ? Float(site.ground) : nil
-            consider(RoadSpot(distance: abs(z - cz), along: x, alongX: true, line: cz, ground: near))
-            consider(RoadSpot(distance: abs(x - cx), along: z, alongX: false, line: cx, ground: near))
+            consider(RoadSpot(distance: abs(z - sz), along: x, alongX: true, line: sz, site: site))
+            consider(RoadSpot(distance: abs(x - sx), along: z, alongX: false, line: sx, site: site))
             let ring = site.radius + 6
             consider(RoadSpot(distance: abs(d - ring), along: x + z, alongX: true, line: 0, ground: Float(site.ground)))
+        } else {
+            // A winding country road (east-west or north-south), joining the highways at the
+            // cell's edges.
+            let r = noise.hash(cx &* 13 &+ 101, cz &* 29 &+ 7)
+            if r < 0.65 {
+                let alongX = r < 0.35
+                let a = alongX ? x : z, b = alongX ? z : x
+                let line = (alongX ? cz : cx) * cell + cell / 2
+                let spot = RoadSpot(distance: 0, along: a, alongX: alongX, line: line, wind: 34, phase: r * 40)
+                let w = TerrainGenerator.wiggle(Float(a), spot.phase)
+                let across = abs(Float(b) - TerrainGenerator.center(spot, at: a)) / (1 + (spot.wind * w.slope) * (spot.wind * w.slope)).squareRoot()
+                consider(RoadSpot(distance: Int(across.rounded()), along: a, alongX: alongX, line: line, wind: spot.wind, phase: spot.phase))
+            }
         }
         return best
     }
 
-    /// The road's height: the land, smoothed along the road so hills become gentle slopes.
-    private func roadHeight(_ spot: RoadSpot) -> Float {
+    /// Smoothed land heights along roads, worked out once (chunks are made on several threads).
+    private struct RoadKey: Hashable {
+        let seed: UInt64
+        let alongX: Bool
+        let line: Int
+        let wind: Float
+        let phase: Float
+        let at: Int
+    }
+    private final class RoadCache: @unchecked Sendable {
+        let lock = NSLock()
+        var heights: [RoadKey: Float] = [:]
+    }
+    private static let roadCache = RoadCache()
+
+    /// The road's height: the land averaged over about 150 blocks of road, so it runs nearly flat
+    /// with only long, gentle slopes. Where roads meet they're at the same height: highways meet
+    /// exactly at their crossings, other roads ease to the highway's height as they reach it, to
+    /// a settlement's ground as they leave it, and to the landing pad's near the start.
+    private func roadHeight(_ spot: RoadSpot, x: Int, z: Int) -> Float {
         if let ground = spot.ground { return ground }
-        // The land averaged over about 90 blocks of road, worked out every 8 blocks and
-        // blended in between, so the road climbs in gentle, even slopes.
-        func smooth(_ a: Int) -> Float {
-            var sum: Float = 0
-            for k in -4...4 {
-                let p = a + k * 10
-                sum += spot.alongX ? baseHeight(p, spot.line) : baseHeight(spot.line, p)
+        var h: Float
+        if spot.wind == 0 && spot.site == nil {
+            h = highwayHeight(line: spot.line, along: spot.along, alongX: spot.alongX)
+        } else {
+            h = smoothed(spot, spot.along)
+            if let site = spot.site {
+                let d = Float(max(abs(x - site.center.x), abs(z - site.center.y)) - site.radius)
+                let k = min(1, max(0, (d - 2) / 50))
+                h = Float(site.ground) * (1 - k) + h * k
             }
-            return sum / 9
+            // Meet the highway at the cell's edge.
+            let cell = TerrainGenerator.settlementCell
+            let m = floorMod(spot.along, cell)
+            let edge = m < cell / 2 ? spot.along - m : spot.along - m + cell
+            let across = Int(TerrainGenerator.center(spot, at: edge).rounded())
+            let meet = highwayHeight(line: edge, along: across, alongX: !spot.alongX)
+            let k = min(1, Float(min(m, cell - m)) / 45)
+            h = meet * (1 - k) + h * k
         }
-        let a0 = floorDiv(spot.along, 8) * 8
-        let t = Float(spot.along - a0) / 8
+        let pad = TerrainGenerator.pad
+        let fromPad = Float(max(abs(x - pad.x), abs(z - pad.y)))
+        let k = min(1, max(0, (fromPad - 12) / 40))
+        return Float(padHeight) * (1 - k) + h * k
+    }
+
+    /// A highway's height: smoothed land, nudged so it's exactly level with the highways it
+    /// crosses at each end of the stretch.
+    private func highwayHeight(line: Int, along: Int, alongX: Bool) -> Float {
+        let cell = TerrainGenerator.settlementCell
+        let spot = RoadSpot(distance: 0, along: along, alongX: alongX, line: line)
+        let a0 = floorDiv(along, cell) * cell
+        let t = Float(along - a0) / Float(cell)
+        func crossing(_ a: Int) -> (here: Float, corner: Float) {
+            let here = smoothed(spot, a)
+            let other = smoothed(RoadSpot(distance: 0, along: line, alongX: !alongX, line: a), line)
+            return (here, (here + other) / 2)
+        }
+        let c0 = crossing(a0), c1 = crossing(a0 + cell)
+        return smoothed(spot, along) + (c0.corner - c0.here) * (1 - t) + (c1.corner - c1.here) * t
+    }
+
+    /// The land along a road, averaged over about 150 blocks, worked out every 8 blocks and
+    /// blended in between.
+    private func smoothed(_ spot: RoadSpot, _ along: Int) -> Float {
+        func smooth(_ a: Int) -> Float {
+            let key = RoadKey(seed: planet.seed, alongX: spot.alongX, line: spot.line, wind: spot.wind, phase: spot.phase, at: a)
+            let cache = TerrainGenerator.roadCache
+            cache.lock.lock()
+            if let h = cache.heights[key] {
+                cache.lock.unlock()
+                return h
+            }
+            cache.lock.unlock()
+            var sum: Float = 0
+            for k in -6...6 {
+                let p = a + k * 12
+                let across = Int(TerrainGenerator.center(spot, at: p).rounded())
+                sum += spot.alongX ? baseHeight(p, across) : baseHeight(across, p)
+            }
+            let h = sum / 13
+            cache.lock.lock()
+            if cache.heights.count > 80_000 { cache.heights.removeAll() }
+            cache.heights[key] = h
+            cache.lock.unlock()
+            return h
+        }
+        let a0 = floorDiv(along, 8) * 8
+        let t = Float(along - a0) / 8
         return smooth(a0) * (1 - t) + smooth(a0 + 8) * t
     }
 
@@ -152,19 +257,21 @@ struct TerrainGenerator: Sendable {
     func height(_ x: Int, _ z: Int) -> Int {
         if planet.isStation { return StationPlan.height(x, z) }
         var h = baseHeight(x, z) + craterOffset(x, z)
-        // Roads: flat across, gentle along, blending into the land at their edges.
+        // Cities and bases sit on flat ground.
+        h = settlementHeight(x, z, natural: h)
+        // Roads: flat across and nearly flat along, with the land graded smoothly down (or up)
+        // to meet them, so nothing ever covers a road.
         if let spot = road(x, z) {
-            let target = roadHeight(spot)
+            let target = roadHeight(spot, x: x, z: z)
             let edge = TerrainGenerator.roadHalfWidth
             if spot.distance <= edge {
                 h = target
             } else {
-                let k = Float(spot.distance - edge) / Float(TerrainGenerator.roadReach - edge)
+                let u = Float(spot.distance - edge) / Float(TerrainGenerator.roadReach - edge)
+                let k = u * u * (3 - 2 * u)
                 h = target * (1 - k) + h * k
             }
         }
-        // Cities and bases sit on flat ground.
-        h = settlementHeight(x, z, natural: h)
         // Flatten the ground around the landing pad.
         let pad = TerrainGenerator.pad
         let padDistance = max(abs(x - pad.x), abs(z - pad.y))
@@ -296,9 +403,10 @@ struct TerrainGenerator: Sendable {
         }
 
         // A row of crate stacks in front of where you start, to try the laser on.
-        for (dx, crateHeight) in [(-4, 2), (0, 3), (4, 2)] {
+        for (dx, crateHeight) in [(8, 2), (12, 3), (16, 2)] {
             let x = TerrainGenerator.spawn.x + dx
             let z = TerrainGenerator.spawn.y - 9
+            if let spot = road(x, z), spot.distance <= TerrainGenerator.roadHalfWidth + 1 { continue }
             let top = height(x, z)
             for y in top..<(top + crateHeight) { put(x, y, z, B.crate, onlyAir: false) }
         }

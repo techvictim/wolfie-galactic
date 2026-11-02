@@ -147,7 +147,7 @@ extension Game {
         shareVehicle(v, on: planet.id, driver: myID)
         Sound.shared.play("vehicle-in", volume: 0.8)
         Voices.shared.say("ride", cooldown: 8)
-        Sound.shared.startLoop(kind.engineSound, channel: "engine", volume: 0.15, pitch: 0.8)
+        Sound.shared.startLoop(kind.engineSound, channel: "engine", volume: kind.isShip ? 0.15 : 0.03, pitch: 0.8)
         if kind.isShip && kind != .starship { show("Flying the \(kind.name)") }
     }
 
@@ -203,7 +203,7 @@ extension Game {
             return
         }
         // Keeps the engine running, including after a pause.
-        Sound.shared.startLoop(kind.engineSound, channel: "engine", volume: 0.15, pitch: 0.8)
+        Sound.shared.startLoop(kind.engineSound, channel: "engine", volume: kind.isShip ? 0.15 : 0.03, pitch: 0.8)
 
         let settings = GameSettings.shared
         let lookY = frame.look.y * (settings.invertLook ? -1 : 1)
@@ -221,7 +221,8 @@ extension Game {
             if frame.action { Sound.shared.play("horn", volume: 0.9) }
             if frame.jumpPressed && v.climb > 0 { Sound.shared.playVaried("jump", volume: 0.5) }
             let revs = abs(v.speed) / kind.topSpeed
-            Sound.shared.setLoop(channel: "engine", volume: 0.12 + revs * 0.25, pitch: 0.75 + revs * 0.9)
+            // Quiet: a soft hum when idling, a little louder at speed.
+            Sound.shared.setLoop(channel: "engine", volume: kind.hovers ? 0.06 + revs * 0.12 : 0.025 + revs * 0.07, pitch: 0.8 + revs * 0.6)
             // Bump a robo-cat at speed and it's knocked out.
             if abs(v.speed) > 4 {
                 for catID in roboCats.ids(near: v.position, within: 2.4) { hitCat(catID, from: v.position, direct: true) }

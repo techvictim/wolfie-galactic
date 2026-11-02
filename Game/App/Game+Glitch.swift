@@ -185,7 +185,7 @@ extension Game {
             hearts += 1
             Sound.shared.play("heart", volume: 0.6)
         }
-        armory.later(2) { [weak self] in self?.rebuild(nest, quick: false) }
+        rebuildLater(nest)
         // Every nest in the settlement cured: Glitch-free!
         if nestsLeft(in: site) == 0 {
             let name = settlementName(site)
@@ -194,6 +194,21 @@ extension Game {
                 Voices.shared.say("free", cooldown: 0, interrupt: true)
                 Sound.shared.play("craft", volume: 0.8)
             }
+        }
+    }
+
+    /// Let it all come down first: wait for the pieces to finish falling and the dust to settle,
+    /// then a while longer, before the builder bots start.
+    func rebuildLater(_ nest: GlitchNest, wait: Float = 15) {
+        glitch.rebuilding.insert(nest.id)
+        armory.later(wait) { [weak self] in
+            guard let self else { return }
+            if !self.falling.isEmpty {
+                self.rebuildLater(nest, wait: 3)
+                return
+            }
+            self.glitch.rebuilding.remove(nest.id)
+            self.rebuild(nest, quick: false)
         }
     }
 
@@ -295,7 +310,7 @@ extension Game {
             if w === world && place == .surface {
                 effects.sparkles(at: nest.center, spread: SIMD3<Float>(nest.max &- nest.min) * 0.5)
                 Sound.shared.play("cure", volume: 0.6)
-                armory.later(2) { [weak self] in self?.rebuild(nest, quick: false) }
+                rebuildLater(nest)
             } else {
                 rebuild(nest, quick: true, in: w)
             }
