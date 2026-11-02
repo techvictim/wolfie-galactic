@@ -141,6 +141,7 @@ extension Game {
             if messageTimer <= 0 { show("Too far! Turn back toward the planets") }
         }
 
+        spaceTraffic.root.isEnabled = space.planetID == PlanetCatalog.shared.homeID
         spaceTraffic.update(dt: dt)
         if checkStationEntry(v) {
             spaceShip = v
