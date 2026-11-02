@@ -36,10 +36,12 @@ struct WeaponDef: Decodable, Sendable, Identifiable {
     let look: String
     let hand: String
     let sound: String
+    /// The colour of its energy bolts.
+    let color: SIMD3<Float>
 
     private enum CodingKeys: String, CodingKey {
         case id, name, group, about, type, cooldown, hold, range, radius, speed, gravity, pierce, spread, pellets
-        case fuse, bounce, drill, lob, count, remote, zoom, size, recharge, duration, style, look, hand, sound
+        case fuse, bounce, drill, lob, count, remote, zoom, size, recharge, duration, style, look, hand, sound, color
     }
 
     init(from decoder: Decoder) throws {
@@ -72,6 +74,7 @@ struct WeaponDef: Decodable, Sendable, Identifiable {
         look = try c.decodeIfPresent(String.self, forKey: .look) ?? "ball"
         hand = try c.decodeIfPresent(String.self, forKey: .hand) ?? "gun"
         sound = try c.decodeIfPresent(String.self, forKey: .sound) ?? ""
+        color = BlockRegistry.parseHex(try c.decodeIfPresent(String.self, forKey: .color) ?? "#5ff0ff")
     }
 
     /// Your character points it where you look.

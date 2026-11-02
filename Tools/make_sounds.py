@@ -279,13 +279,22 @@ def make_weapons():
     wavfile.write(os.path.join(OUT, "flame-loop.wav"), SR, (normalize(loop_crossfade(roar, 0.15), 0.55) * 32767).astype(np.int16))
 
     # Guns.
-    # Kept short and soft: they repeat a lot.
-    save_sfx("gun-mini", lowpass(gunshot(0.045, 1400, 0.4, 160), 3500), 0.3)
-    save_sfx("gun-heavy", lowpass(gunshot(0.09, 900, 0.45, 90), 3000), 0.4)
-    sniper = mix(lowpass(gunshot(0.16, 1200, 0.6, 110), 3500), delay(lowpass(noise(0.35), 600) * env(int(0.35 * SR), 0.03, 0.2) * 0.2, 0.08))
-    save_sfx("gun-sniper", sniper, 0.5)
-    save_sfx("gun-rifle", mix(lowpass(gunshot(0.13, 1100, 0.6, 100), 3500), delay(lowpass(noise(0.25), 600) * env(int(0.25 * SR), 0.02, 0.15) * 0.15, 0.06)), 0.45)
-    save_sfx("shotgun", lowpass(gunshot(0.18, 800, 0.5, 80), 3000), 0.45)
+    # Energy guns: soft, short zaps (they repeat a lot).
+    def zap(seconds, f0, f1, shape="square", cut=3200, ring=0.0):
+        n = int(seconds * SR)
+        z = sweep(f0, f1, seconds, shape, 0.5) * env(n, 0.001, seconds * 0.6)
+        if ring:
+            z *= 1 + ring * np.sin(2 * np.pi * 90 * t_of(seconds))
+        return lowpass(z, cut)
+    save_sfx("gun-mini", zap(0.05, 1900, 900), 0.22)
+    save_sfx("gun-heavy", mix(zap(0.1, 1100, 330, cut=2400), sweep(160, 70, 0.08) * env(int(0.08 * SR), 0.001, 0.05) * 0.6), 0.32)
+    sniper = mix(sweep(600, 2400, 0.06, "sine", 1.2) * env(int(0.06 * SR), 0.01, 0.02) * 0.4,
+                 delay(zap(0.16, 2600, 500, "saw", 4200), 0.05),
+                 delay(mix(*[delay(bell(f, 0.25, 2) * 0.12, 0.03 * k) for k, f in enumerate([1760, 2349])]), 0.08))
+    save_sfx("gun-sniper", sniper, 0.4)
+    save_sfx("gun-rifle", mix(zap(0.13, 1500, 380, "saw", 3000, ring=0.5), bell(880, 0.15, 3) * 0.1), 0.36)
+    save_sfx("shotgun", mix(*[delay(zap(0.07, 1700 - 150 * k, 500, cut=2600), 0.012 * k) for k in range(4)],
+                            bandpass(noise(0.12), 800, 3000) * env(int(0.12 * SR), 0.001, 0.05) * 0.3), 0.36)
 
     # Launchers and throwing.
     save_sfx("cannon", boom(0.35, 500, 90, 30, 0.1, 0.2), 0.5)

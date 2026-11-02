@@ -126,9 +126,7 @@ enum VoxelMesher {
                     let glass = BlockTextures.isGlass(id)
                     for (faceIndex, face) in faces.enumerated() {
                         let next = at(lx + face.dir.x, y + face.dir.y, lz + face.dir.z)
-                        // Solid blocks show a face toward air or see-through blocks; see-through
-                        // blocks only toward air (so a glitched wall is one clear skin).
-                        if next != B.air && (glass || !BlockTextures.isGlass(next)) { continue }
+                        if next != B.air { continue }
                         let rect = BlockTextures.rect(id: id, face: faceIndex)
                         let origin = SIMD3<Float>(Float(lx), Float(y), Float(lz))
                         if glass {

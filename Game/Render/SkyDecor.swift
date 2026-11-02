@@ -57,8 +57,8 @@ enum SkyDecor {
         // Toy-block moons; some have rings.
         let moonColors: [[SIMD3<Float>]] = [
             [SIMD3(0.78, 0.76, 0.84), SIMD3(0.6, 0.58, 0.68), SIMD3(0.45, 0.43, 0.52)],
-            [SIMD3(0.9, 0.62, 0.45), SIMD3(0.75, 0.45, 0.32), SIMD3(0.55, 0.32, 0.25)],
-            [SIMD3(0.55, 0.75, 0.95), SIMD3(0.4, 0.58, 0.85), SIMD3(0.9, 0.95, 1)],
+            [SIMD3(0.7, 0.68, 0.66), SIMD3(0.55, 0.53, 0.52), SIMD3(0.4, 0.39, 0.4)],
+            [SIMD3(0.82, 0.83, 0.86), SIMD3(0.66, 0.67, 0.71), SIMD3(0.5, 0.51, 0.56)],
         ]
         for i in 0..<3 {
             let direction = rng.skyDirection(minUp: 0.15)
@@ -66,26 +66,26 @@ enum SkyDecor {
             guard let moon = ToyMesh.ball(radius: r, colors: moonColors[i % moonColors.count], seed: UInt64(i + 1) &* 977) else { continue }
             let holder = Entity()
             holder.addChild(moon)
-            let size = rng.next(in: 28...60)
+            let size = rng.next(in: 9...18)
             holder.scale = SIMD3(repeating: size / Float(r))
-            if i != 1 {
+            if i == 0 {
                 holder.addChild(ToyMesh.ring(inner: Float(r) * 1.5, outer: Float(r) * 2.4, colors: [SIMD3(0.95, 0.85, 0.6), SIMD3(0.8, 0.7, 0.9)], seed: UInt64(i) &+ 5))
             }
             holder.orientation = simd_quatf(angle: rng.next(in: -0.7...0.7), axis: simd_normalize(SIMD3(1, 0, rng.next(in: -1...1))))
-            holder.position = direction * radius * 0.8
+            holder.position = direction * radius * 0.86
             root.addChild(holder)
         }
 
         // A band of asteroids across the sky.
         let bandAxis = simd_normalize(SIMD3<Float>(rng.next(in: -1...1), 1.2, rng.next(in: -1...1)))
         let start = simd_normalize(simd_cross(bandAxis, SIMD3(0, 0, 1)))
-        for k in 0..<34 {
-            let angle = Float(k) / 34 * .pi * 1.2 + rng.next(in: -0.04...0.04)
+        for k in 0..<22 {
+            let angle = Float(k) / 22 * .pi * 1.2 + rng.next(in: -0.04...0.04)
             var direction = simd_quatf(angle: angle, axis: bandAxis).act(start)
             direction += SIMD3(rng.next(in: -0.05...0.05), rng.next(in: -0.05...0.05), rng.next(in: -0.05...0.05))
             direction = simd_normalize(direction)
             guard direction.y > 0.05, let rock = ToyMesh.rock(seed: UInt64(k) &+ 31) else { continue }
-            let size = rng.next(in: 4...13)
+            let size = rng.next(in: 2.5...7)
             rock.scale = SIMD3(repeating: size)
             rock.orientation = simd_quatf(angle: rng.next(in: 0...6), axis: simd_normalize(SIMD3(rng.next(in: -1...1), 1, rng.next(in: -1...1))))
             rock.position = direction * radius * 0.78

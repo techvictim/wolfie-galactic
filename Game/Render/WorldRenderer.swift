@@ -9,9 +9,11 @@ final class WorldRenderer {
     let root = Entity()
     private(set) var world: World
     /// Textured blocks up close.
-    private let material: UnlitMaterial?
+    private var material: UnlitMaterial?
     /// Plain colours for the far-away land.
-    private let farMaterial: UnlitMaterial?
+    private var farMaterial: UnlitMaterial?
+    private let baseMaterial: UnlitMaterial?
+    private let baseFarMaterial: UnlitMaterial?
     /// See-through blocks (the Glitch); changed to make them pulse.
     private var glassMaterial: UnlitMaterial?
     /// Chunks changed by blasts waiting to be rebuilt, a few each frame.
@@ -40,7 +42,24 @@ final class WorldRenderer {
         self.world = world
         self.material = material
         self.farMaterial = farMaterial
+        self.baseMaterial = material
+        self.baseFarMaterial = farMaterial
         self.glassMaterial = glassMaterial
+    }
+
+    /// Light the land for the time of day: (1, 1, 1) is full daylight.
+    func setTint(_ light: SIMD3<Float>) {
+        let color = PlatformColor(red: CGFloat(light.x), green: CGFloat(light.y), blue: CGFloat(light.z), alpha: 1)
+        if var m = baseMaterial {
+            m.color.tint = color
+            material = m
+            for entity in detail.values where entity.model != nil { entity.model?.materials = [m] }
+        }
+        if var m = baseFarMaterial {
+            m.color.tint = color
+            farMaterial = m
+            for tile in far.values where tile.entity.model != nil { tile.entity.model?.materials = [m] }
+        }
     }
 
     /// The Glitch's see-through blocks pulse: swap in a new material everywhere.

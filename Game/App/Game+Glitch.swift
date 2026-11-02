@@ -163,11 +163,11 @@ extension Game {
         colors[Int(SB.glitchBlock)] = simd_mix(dark, dark * 1.7, SIMD3(repeating: pulse * 0.6))
         colors[Int(SB.glitchGlow)] = simd_mix(glow * 0.75, SIMD3(1, 0.62, 0.62), SIMD3(repeating: pulse))
         PaletteTexture.update(texture, colors: colors)
-        // Up close, Glitch blocks are see-through and breathe in and out.
+        // Up close, Glitch blocks glow and breathe in and out, from red-hot to deep red.
         glitch.glassTimer -= 0.1
         if glitch.glassTimer <= 0, let atlas = blockAtlas {
-            glitch.glassTimer = 0.2
-            renderer.setGlass(BlockTextures.glassMaterial(atlas, opacity: 0.35 + 0.25 * pulse))
+            glitch.glassTimer = 0.15
+            renderer.setGlass(BlockTextures.glassMaterial(atlas, opacity: pulse))
         }
     }
 
@@ -340,6 +340,11 @@ extension Game {
             switch event {
             case .charge(let at):
                 Sound.shared.play("robocat-charge", at: at, listener: player.eye, facing: player.yaw, volume: 0.5)
+            case let .burst(at):
+                // Pop! Sparks and little robot bits; it's a machine, so nothing sad.
+                effects.explosion(at: at, radius: 1.1, colors: [SIMD3(0.64, 0.67, 0.73), SIMD3(0.36, 0.4, 0.46), SIMD3(1, 0.17, 0.23)])
+                effects.spark(at: at)
+                Sound.shared.play("explode", at: at, listener: player.eye, facing: player.yaw, volume: 0.5, pitch: 1.35)
             case let .shot(from, to, hit):
                 Sound.shared.play("robocat-meow", at: from, listener: player.eye, facing: player.yaw, volume: 0.9, pitch: Float.random(in: 0.92...1.1))
                 Sound.shared.play("robocat-laser", at: from, listener: player.eye, facing: player.yaw, volume: 0.6)

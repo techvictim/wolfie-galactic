@@ -142,6 +142,24 @@ struct HUDView: View {
 
     var body: some View {
         ZStack {
+            // In space, pointing at another planet: brackets around it and its name below.
+            if game.place == .space, let target = game.hyperTarget, let destination = PlanetCatalog.shared.planet(id: target) {
+                VStack(spacing: 6) {
+                    Image(systemName: "viewfinder")
+                        .font(.system(size: 96, weight: .ultraLight))
+                        .foregroundStyle(Color(red: 0.55, green: 0.85, blue: 1))
+                    Text(destination.name)
+                        .font(.game(22).weight(.heavy))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black, radius: 3)
+                    Text(destination.kind)
+                        .font(.game(14).weight(.semibold))
+                        .foregroundStyle(Color(red: 0.55, green: 0.85, blue: 1))
+                }
+                .offset(y: 40)
+                .allowsHitTesting(false)
+            }
+
             if game.scoped {
                 ScopeView()
                     .ignoresSafeArea()

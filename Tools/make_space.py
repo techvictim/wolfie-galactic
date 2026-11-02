@@ -101,6 +101,12 @@ def pup_moon():
     crater(0, -2, 3.2)                      # the pad of the paw
     for cx, cy in ((-4, 2), (-1.5, 4), (1.5, 4), (4, 2)):
         crater(cx, cy, 1.4)                 # four toes
+    # Little lights: the Moon Base and its outposts.
+    light, warm = hexrgb("#fff3a0"), hexrgb("#7af5ff")
+    for (lx, ly) in ((5, -3), (6, -2), (-6, -4), (-5, 5), (2, -6), (-2, 7), (6, 4)):
+        column = [z for (x, y, z) in vox if x == lx and y == ly]
+        if column:
+            vox[(lx, ly, max(column))] = light if (lx + ly) % 2 else warm
     return hollow(vox)
 
 

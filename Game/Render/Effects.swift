@@ -175,6 +175,17 @@ final class Effects {
         spawn(.flash, at: center, velocity: .zero, life: 0.3, size: (1, 5), gravity: 0, drag: 0)
     }
 
+    /// A small puff of dust where a falling block lands. Clears quickly.
+    func dustPuff(at point: SIMD3<Float>, color: SIMD3<Float>) {
+        guard particles.count < Effects.maxParticles - 40 else { return }
+        for _ in 0..<3 {
+            let dir = Effects.randomDirection(upward: 0.6)
+            spawn(.smoke, at: point + dir * 0.2, velocity: SIMD3(dir.x * 1.2, Float.random(in: 0.5...1.2), dir.z * 1.2),
+                  life: Float.random(in: 0.35...0.6), size: (0.3, 0.9), gravity: 0, drag: 2)
+        }
+        spawn(.debris(color), at: point, velocity: Effects.randomDirection(upward: 1.5) * 3, life: 0.4, size: (0.15, 0.05), gravity: 15, drag: 0.5)
+    }
+
     /// A red spark drifting up off a Glitch Nest.
     func glitchSpark(at point: SIMD3<Float>) {
         guard particles.count < Effects.maxParticles - 60 else { return }

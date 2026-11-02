@@ -22,7 +22,7 @@ C = {
     "olived": "#46522a", "tan": "#c2a46e", "red": "#d8382f", "hazard": "#ffc21a", "black": "#1b1d22",
     "orange": "#ff8a2a", "green": "#4c7a32", "purple": "#8a4dff", "cyan": "#4ff0ff", "pink": "#ff6fd2",
     "gold": "#ffcc44", "white": "#eef2f8", "rock": "#6b5a4a", "rockd": "#4b3d33", "fire": "#ff6a1a",
-    "yellow": "#ffe14d", "brass": "#d9a94a", "lava": "#ff4d1a", "orb": "#120a1e", "glass": "#9fe8ff",
+    "yellow": "#ffe14d", "ecyan": "#5ff0ff", "eamber": "#ffb13d", "egreen": "#7dff6a", "eviolet": "#b98cff", "epink": "#ff6fd2", "brass": "#d9a94a", "lava": "#ff4d1a", "orb": "#120a1e", "glass": "#9fe8ff",
 }
 
 
@@ -95,18 +95,18 @@ MODELS = {
               stripes(cyly(-9, 0, 4.5, -8, 6, "hazard"), 100, "red"), cyly(-9, 0, 4.5, -8, 6, "red"),
               cyly(-9, 0, 4.6, -1, 1, "hazard")],
     "minigun": sum([[cylx(2 * math.cos(k * math.pi / 3), 2 * math.sin(k * math.pi / 3), 0.8, 2, 20, "dark")] for k in range(6)], [])
-               + [cylx(0, 0, 3.2, 14, 16, "steel"), box((-12, -5, -5), (2, 5, 5), "dark"),
-                  box((-8, -3, 5), (0, 3, 9), "green"), box((-6, -10, -1), (-3, -5, 1), "black"),
+               + [cylx(0, 0, 3.2, 18, 20, "ecyan"), cylx(0, 0, 3.2, 14, 16, "ecyan"), box((-12, -5, -5), (2, 5, 5), "dark"),
+                  box((-8, -3, 5), (0, 3, 9), "ecyan"), box((-6, -10, -1), (-3, -5, 1), "black"),
                   box((-14, 5, -1), (-4, 7, 1), "steel")],
-    "hmg": [cylx(1, 0, 1.2, 4, 24, "dark"), cylx(1, 0, 2, 20, 23, "black"), box((-10, -3, -3), (4, 4, 3), "olive"),
+    "hmg": [stripes(cylx(1, 0, 1.6, 6, 18, "dark"), 3, "eamber"), cylx(1, 0, 1.2, 4, 24, "dark"), cylx(1, 0, 2, 21, 24, "eamber"), box((-10, -3, -3), (4, 4, 3), "olive"),
             box((-6, -7, 3), (2, -1, 7), "olived"), box((10, -9, -0.5), (11, 0, 0.5), "steel"),
             box((13, -9, -0.5), (14, 0, 0.5), "steel"), box((-16, -1, -1), (-10, 3, 1), "olived")],
-    "scope": [cylx(1, 0, 0.8, 4, 25, "dark"), box((-16, -2, -1.5), (4, 3, 1.5), "tan"), box((-18, -5, -1.5), (-12, 3, 1.5), "tan"),
+    "scope": [cylx(1, 0, 1.2, 22, 25, "egreen"), box((-12, 1, -1.7), (-2, 2, 1.7), "egreen"), cylx(1, 0, 0.8, 4, 25, "dark"), box((-16, -2, -1.5), (4, 3, 1.5), "tan"), box((-18, -5, -1.5), (-12, 3, 1.5), "tan"),
               cylx(6, 0, 1.8, -8, 6, "black"), cylx(6, 0, 1.8, 6, 7, "glass"), box((-4, 3, -0.8), (0, 5, 0.8), "black"),
               box((-2, -6, -1), (1, -2, 1), "black")],
-    "sniper": [cylx(1, 0, 1.1, 6, 23, "dark"), box((-15, -3, -1.6), (-2, 3, 1.6), "wood"), box((-2, -1, -2), (7, 3, 2), "dark"),
+    "sniper": [stripes(cylx(1, 0, 1.6, 8, 20, "dark"), 4, "eviolet"), cylx(1, 0, 1.1, 6, 23, "dark"), cylx(1, 0, 1.4, 21, 23, "eviolet"), box((-15, -3, -1.6), (-2, 3, 1.6), "wood"), box((-2, -1, -2), (7, 3, 2), "dark"),
                cylx(5.5, 0, 1.4, -2, 6, "black"), box((0, -6, -1), (3, -1, 1), "wood")],
-    "shotgun": [cylx(1.5, 0, 1.3, 0, 20, "dark"), cylx(-1.2, 0, 1.2, 4, 12, "wood"), box((-4, -1, -2), (2, 3, 2), "dark"),
+    "shotgun": [cylx(1.5, 0, 2.2, 17, 20, "epink"), cylx(1.5, 0, 1.3, 0, 20, "dark"), cylx(-1.2, 0, 1.2, 4, 12, "wood"), box((-4, -1, -2), (2, 3, 2), "dark"),
                 box((-16, -3, -1.6), (-4, 2, 1.6), "wood"), box((-3, -6, -1), (0, -1, 1), "black"), box((0, -3.5, -2.5), (2, -2.5, 2.5), "red")],
     "cannon": [cylx(2, 0, 3.4, -6, 16, "dark"), cylx(2, 0, 4.2, 14, 16, "black"), ell((-7, 2, 0), (3, 3, 3), "dark"),
                cylz(-2, -5, 5.5, 4, 6, "red"), cylz(-2, -5, 5.5, -6, -4, "red"), cylz(-2, -5, 2, -6, 6, "wood"),

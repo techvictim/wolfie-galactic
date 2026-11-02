@@ -15,6 +15,8 @@ final class RoboCats {
         case charge(at: SIMD3<Float>)
         /// Fired. hit: it got you.
         case shot(from: SIMD3<Float>, to: SIMD3<Float>, hit: Bool)
+        /// A knocked-out cat finished tumbling and popped.
+        case burst(at: SIMD3<Float>)
     }
 
     /// How tough the cats are, from the Danger setting.
@@ -44,6 +46,9 @@ final class RoboCats {
         var hits = 0
         var flash: Float = 0
         var target = SIMD3<Float>(repeating: 0)
+        /// Flying and tumbling after being knocked out.
+        var flight = SIMD3<Float>(repeating: 0)
+        var spin = SIMD3<Float>(1, 0, 0)
     }
 
     private struct Heart {
@@ -153,13 +158,32 @@ final class RoboCats {
             let tip = c.body.convert(position: RoboCats.laserTip, to: nil)
 
             if c.state == .asleep {
+                // Ragdoll: it flies, tumbles with its legs flopping, bounces, then pops.
+                c.flight.y -= 20 * dt
+                c.position += c.flight * dt
+                let ground = RoboCats.ground(world, c.position) ?? c.ground
+                if c.position.y < ground {
+                    c.position.y = ground
+                    if c.flight.y < -3 {
+                        c.flight.y *= -0.35
+                        c.flight.x *= 0.6
+                        c.flight.z *= 0.6
+                    } else {
+                        c.flight = .zero
+                    }
+                }
+                c.body.position = c.position
+                c.body.orientation = simd_quatf(angle: simd_length(c.spin) * dt, axis: simd_normalize(c.spin)) * c.body.orientation
+                for (i, leg) in c.legs.enumerated() {
+                    leg.orientation = simd_quatf(angle: sin(c.stateTime * 23 + Float(i) * 1.7) * 1.1, axis: SIMD3(1, 0, Float(i % 2)))
+                }
                 if c.stateTime <= 0 {
                     c.body.removeFromParent()
                     c.beam.removeFromParent()
                     cats[id] = nil
+                    events.append(.burst(at: c.position + SIMD3(0, 0.6, 0)))
                     dropHeart(at: c.position)
                 } else {
-                    c.body.scale = SIMD3(repeating: min(1, c.stateTime / 0.6))
                     cats[id] = c
                 }
                 continue
@@ -299,11 +323,15 @@ final class RoboCats {
         c.flash = 0.15
         if direct || c.hits >= hitsToSleep {
             c.state = .asleep
-            c.stateTime = 3
+            c.stateTime = Float.random(in: 1.1...1.5)
             c.beam.isEnabled = false
-            // Tips over onto its side.
-            c.model.orientation = simd_quatf(angle: .pi / 2, axis: SIMD3(0, 0, 1))
-            c.model.position = SIMD3(0.5, 0.4, 0) * RoboCats.scale
+            // Knocked flying, away from the hit, spinning.
+            var away = c.position - origin
+            away.y = 0
+            let push = simd_length(away) > 0.1 ? simd_normalize(away) : SIMD3<Float>(0, 0, 1)
+            c.flight = push * Float.random(in: 4...7) + SIMD3(0, Float.random(in: 6...9), 0)
+            c.spin = SIMD3(Float.random(in: -9...9), Float.random(in: -6...6), Float.random(in: -9...9))
+            if simd_length(c.spin) < 3 { c.spin = SIMD3(8, 2, 5) }
             cats[id] = c
             return true
         }

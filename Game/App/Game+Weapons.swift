@@ -179,11 +179,11 @@ extension Game {
                     end = SIMD3<Float>(hit.block) + 0.5
                 }
             }
-            let tracer = SIMD3<Float>(1, 0.85, 0.45)
+            let tracer = def.color
             let first = broken.first
             let last = broken.last
             let count = broken.count
-            effects.fireBolt(from: aim.muzzle, to: end, color: tracer, speed: 320) { [weak self] in
+            effects.fireBolt(from: aim.muzzle, to: end, color: tracer, speed: 240) { [weak self] in
                 guard let self else { return }
                 if let hitCatID {
                     self.hitCat(hitCatID, from: aim.origin, direct: def.pierce >= 8)

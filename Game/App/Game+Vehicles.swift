@@ -271,8 +271,8 @@ extension Game {
             } else if let critter {
                 self.zapCritter(critter)
             } else if let block, block.y > 0, self.world.block(block) != B.air {
-                self.blastBlock(block)
-                self.noteBigBlast()
+                // Vehicle guns hit hard: each bolt blows a small crater.
+                self.explode(at: SIMD3<Float>(block) + 0.5, radius: v.kind.isShip ? 2.6 : 2)
             } else {
                 self.effects.spark(at: end)
             }

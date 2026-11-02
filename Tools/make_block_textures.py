@@ -275,8 +275,8 @@ def glitch(c, seed, glow):
     """Dark red with bright circuit veins crawling over it."""
     t = speckle(c, seed, 0.06)
     r = rng(seed)
-    vein = np.clip(hexrgb("#ff4d5a") * (1.15 if glow else 1), 0, 255)
-    for _ in range(3):
+    vein = hexrgb("#ffd6da") if glow else hexrgb("#ff6a78")
+    for _ in range(5):
         x, y = int(r.integers(0, T)), int(r.integers(0, T))
         for _ in range(14):
             t[y % T, x % T] = vein

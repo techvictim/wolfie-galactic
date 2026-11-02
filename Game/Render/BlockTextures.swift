@@ -15,7 +15,7 @@ enum BlockTextures {
     static let height = tile * rows
     static let shades = 6
 
-    /// Glitch blocks are see-through.
+    /// Glitch blocks glow: they're drawn with their own material, which pulses.
     nonisolated static func isGlass(_ id: UInt8) -> Bool {
         id == 35 || id == 36
     }
@@ -76,10 +76,11 @@ enum BlockTextures {
         return try? TextureResource(image: atlas, withName: nil, options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .none))
     }
 
-    /// See-through blocks: the same texture, partly transparent.
-    @MainActor static func glassMaterial(_ texture: TextureResource, opacity: Float) -> UnlitMaterial {
+    /// Glowing blocks: the same texture, brightened and dimmed to pulse.
+    @MainActor static func glassMaterial(_ texture: TextureResource, opacity brightness: Float) -> UnlitMaterial {
         var m = PaletteTexture.material(texture)
-        m.blending = .transparent(opacity: .init(floatLiteral: opacity))
+        let b = CGFloat(min(1, max(0, brightness)))
+        m.color.tint = PlatformColor(red: 1, green: b * 0.85 + 0.15, blue: b * 0.85 + 0.15, alpha: 1)
         return m
     }
 }

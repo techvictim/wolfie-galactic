@@ -141,6 +141,7 @@ final class Game {
     @ObservationIgnored var lastMePosition: SIMD3<Float>?
     @ObservationIgnored var recentBlasts: [Float] = []
     @ObservationIgnored var sprinting = false
+    @ObservationIgnored var rubbleSoundTimer: Float = 0
     @ObservationIgnored var ambientTrack = Int.random(in: 1...6)
     @ObservationIgnored var nextAmbientChange: Float = 0
     /// Weapons (see Game+Weapons.swift).
@@ -173,6 +174,14 @@ final class Game {
     @ObservationIgnored var hyperspaceTime: Float = -1
     @ObservationIgnored var hyperspaceTarget: Planet?
     @ObservationIgnored var skyDarkness: Float = -1
+    /// The day cycle (see Game+Sky.swift).
+    @ObservationIgnored var daySky = SIMD3<Float>(0.77, 0.71, 1)
+    @ObservationIgnored var dayLight: Float = 1
+    @ObservationIgnored var dayClock: Float = 120
+    @ObservationIgnored var dayTimer: Float = 0
+    @ObservationIgnored var dayTint: Float = -1
+    @ObservationIgnored let sun = Entity()
+    @ObservationIgnored let clouds = Entity()
 
     // Everyone going their own way (see Game+Together.swift).
     /// The host's copies of planets it isn't on, which friends may be on.
@@ -284,6 +293,9 @@ final class Game {
         root.addChild(sky)
         sky.addChild(stars)
         sky.addChild(skyBodies)
+        sky.addChild(sun)
+        root.addChild(clouds)
+        buildSun()
         root.addChild(highlight)
         root.addChild(me.root)
         me.root.isEnabled = false
@@ -347,6 +359,7 @@ final class Game {
         flying = player.flying
 
         skyDarkness = -1
+        setupDayCycle()
         applySky(darkness: 0)
         applyViewDistance()
 
@@ -358,17 +371,18 @@ final class Game {
     }
 
     /// The planet's sky, darkening toward black space (darkness 1) as a ship climbs.
-    func applySky(darkness raw: Float) {
+    func applySky(darkness raw: Float, force: Bool = false) {
         // Only change materials when the shade really changes.
         let darkness = (raw * 20).rounded() / 20
-        guard darkness != skyDarkness else { return }
+        guard darkness != skyDarkness || force else { return }
         skyDarkness = darkness
         let space = SIMD3<Float>(0.012, 0.008, 0.035)
-        let sky3 = BlockRegistry.parseHex(planet.sky) * (1 - darkness) + space * darkness
+        // The time of day colours the sky (see Game+Sky.swift).
+        let sky3 = daySky * (1 - darkness) + space * darkness
         var skyMaterial = UnlitMaterial(color: Game.color(sky3))
         skyMaterial.faceCulling = .none
         sky.model?.materials = [skyMaterial]
-        stars.isEnabled = planet.stars || darkness > 0.3
+        stars.isEnabled = planet.stars || darkness > 0.3 || dayLight < 0.45
         skyBodies.isEnabled = darkness < 1
         let hazeOpacity: [Float] = [0.22, 0.3, 0.72]
         for (i, shell) in hazeShells.enumerated() {
@@ -423,6 +437,7 @@ final class Game {
     /// The sky and haze move with the camera.
     func followCamera(_ eye: SIMD3<Float>) {
         sky.position = eye
+        moveClouds(eye)
         for shell in hazeShells { shell.position = eye }
     }
 
@@ -453,6 +468,7 @@ final class Game {
             updateArmory(dt: dt)
             updateGlitch(dt: dt)
             updateFalling(dt: dt)
+            updateDayCycle(dt: dt)
         } else {
             stopGlitchHum()
         }
