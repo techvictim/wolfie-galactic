@@ -57,6 +57,8 @@ jobs:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      # Online play (invite codes): the Firebase web API key, kept in GitHub Secrets.
+      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
       CHOSEN: ${{ github.event.inputs.platforms || 'all' }}
     steps:
       - name: Check this app was chosen and the key is set up
@@ -124,6 +126,7 @@ jobs:
             -archivePath "$RUNNER_TEMP/app.xcarchive" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             WG_BUILD_COMMIT="$(git rev-parse --short HEAD)" \
+            WG_FIREBASE_KEY="$FIREBASE_API_KEY" \
             WG_BUILD_DATE="$(TZ=America/New_York date '+%b %-d %-I:%M %p')" \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee archive.log | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" || true

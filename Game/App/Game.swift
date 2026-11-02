@@ -54,7 +54,15 @@ final class Game {
     @ObservationIgnored var viewSize: CGSize = .zero
     @ObservationIgnored let avatars = Avatars()
     @ObservationIgnored var host: NetHost?
-    @ObservationIgnored var link: PeerLink?
+    @ObservationIgnored var link: (any FriendLink)?
+    /// Online play: the room friends elsewhere can join with its code (while hosting).
+    @ObservationIgnored var cloudRoom: CloudRoom?
+    var inviteCode: String?
+    /// Someone asking to join with the invite code, waiting for a yes or no.
+    var joinRequest: JoinRequest?
+    /// The invite code being picked to join a friend's game: a word and two digits.
+    var codeWord = 0
+    var codeDigits = [4, 2]
     @ObservationIgnored let browser = NetBrowser()
     @ObservationIgnored var myID = Net.hostID
     @ObservationIgnored var hostName = ""
@@ -859,6 +867,7 @@ final class Game {
         case play, controls, settings, resume, quitToTitle
         case lookSpeed, invertLook, speakNames, viewDistance, restartPlanet, back
         case friends, hostGame, join(String), searching, yourName, yourColor
+        case codeWord, codeDigit(Int), joinCode, letIn, sayNo, inviteInfo
         case music, soundEffects, danger, critterBook, backpackMode
         case map, goTo(Int), goToPlace(String)
         case crew, cameraView, voices, story, quitGame
@@ -872,8 +881,12 @@ final class Game {
         case .title: return [.play, .crew, .friends, .controls, .settings]
         case .friends:
             let games: [MenuItem] = foundGames.isEmpty ? [.searching] : foundGames.map { .join($0.name) }
-            return [.hostGame] + games + [.yourName, .yourColor, .back]
-        case .paused: return [.resume, .map, .crew, .critterBook, .story, .controls, .settings, .quitToTitle]
+            let online: [MenuItem] = Cloud.shared.available && session == .solo ? [.codeWord, .codeDigit(0), .codeDigit(1), .joinCode] : []
+            return (joinRequest != nil ? [.letIn, .sayNo] : []) + [.hostGame] + games + online + [.yourName, .yourColor, .back]
+        case .paused:
+            let asking: [MenuItem] = joinRequest != nil ? [.letIn, .sayNo] : []
+            let code: [MenuItem] = session == .hosting && inviteCode != nil ? [.inviteInfo] : []
+            return asking + [.resume] + code + [.map, .crew, .critterBook, .story, .controls, .settings, .quitToTitle]
         case .map:
             var items: [MenuItem] = friendSpots.map { .goTo($0.id) }
             if place == .surface {
@@ -915,7 +928,13 @@ final class Game {
                 : ("Start \(planet.name) over", nil)
         case .back: return ("Back", nil)
         case .friends: return ("Play together", nil)
-        case .hostGame: return ("Host a game", "on this Wi-Fi")
+        case .hostGame: return ("Host a game", Cloud.shared.available ? "Wi-Fi or invite code" : "on this Wi-Fi")
+        case .codeWord: return ("Friend's code: word", CloudRoom.words[codeWord])
+        case .codeDigit(let i): return ("Friend's code: \(i == 0 ? "first" : "second") number", "\(codeDigits[i])")
+        case .joinCode: return ("Join with code", typedCode)
+        case .letIn: return ("Let \(joinRequest?.name ?? "them") join", "from somewhere else")
+        case .sayNo: return ("Not now", nil)
+        case .inviteInfo: return ("Invite code", inviteCode)
         case .join(let name): return ("Join \(name)", nil)
         case .searching: return ("Looking for games on this Wi-Fi…", nil)
         case .yourName: return ("Your name", settings.playerNameText)
@@ -994,6 +1013,14 @@ final class Game {
         case .viewDistance:
             settings.viewDistance = min(max(settings.viewDistance + step, 0), 3)
             applyViewDistance()
+        case .codeWord:
+            let count = CloudRoom.words.count
+            codeWord = ((codeWord + step) % count + count) % count
+            Speaker.shared.say(CloudRoom.words[codeWord].capitalized)
+        case .codeDigit(let i):
+            codeDigits[i] = ((codeDigits[i] + step) % 10 + 10) % 10
+            if i == 0 && codeDigits[0] == 0 { codeDigits[0] = step > 0 ? 1 : 9 }   // codes are 10–99
+            Speaker.shared.say("\(codeDigits[i])")
         case .yourName:
             let count = GameSettings.playerNames.count
             settings.playerName = ((settings.playerName + step) % count + count) % count
@@ -1079,8 +1106,16 @@ final class Game {
             hostGame()
         case .join(let name):
             join(named: name)
-        case .searching:
-            break
+        case .searching, .inviteInfo:
+            if let inviteCode, item == .inviteInfo { Speaker.shared.say(inviteCode.replacingOccurrences(of: "-", with: " ")) }
+        case .codeWord, .codeDigit:
+            adjust(item, by: 1)
+        case .joinCode:
+            joinWithCode()
+        case .letIn:
+            letFriendIn()
+        case .sayNo:
+            sayNoToFriend()
         case .yourName, .yourColor, .soundEffects:
             adjust(item, by: 1)
         case .danger:

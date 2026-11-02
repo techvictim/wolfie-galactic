@@ -32,6 +32,7 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     # Filled in by the TestFlight upload with the commit and date it was built from.
     WG_BUILD_COMMIT: "local"
+    WG_FIREBASE_KEY: ""
     WG_BUILD_DATE: "Xcode"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: 299JWH22HW
@@ -63,6 +64,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WGBuildCommit: $(WG_BUILD_COMMIT)
+        WGFirebaseKey: $(WG_FIREBASE_KEY)
         WGBuildDate: $(WG_BUILD_DATE)
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
@@ -114,6 +116,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WGBuildCommit: $(WG_BUILD_COMMIT)
+        WGFirebaseKey: $(WG_FIREBASE_KEY)
         WGBuildDate: $(WG_BUILD_DATE)
         ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.kids-games
@@ -144,6 +147,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WGBuildCommit: $(WG_BUILD_COMMIT)
+        WGFirebaseKey: $(WG_FIREBASE_KEY)
         WGBuildDate: $(WG_BUILD_DATE)
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}

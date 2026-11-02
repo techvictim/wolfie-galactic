@@ -11,6 +11,12 @@ struct NameTag: Identifiable, Equatable {
     let y: CGFloat
 }
 
+/// Someone asking to join with the invite code.
+struct JoinRequest: Equatable {
+    let uid: String
+    let name: String
+}
+
 /// Where a friend is, for the map.
 struct FriendSpot: Identifiable, Equatable {
     let id: Int
@@ -64,8 +70,9 @@ extension Game {
         case .solo:
             return nil
         case .hosting:
-            if players.isEmpty { return "Hosting · waiting for friends" }
-            return "Hosting · " + players.map(\.name).joined(separator: ", ")
+            let code = inviteCode.map { " · invite code \($0)" } ?? ""
+            if players.isEmpty { return "Hosting · waiting for friends" + code }
+            return "Hosting · " + players.map(\.name).joined(separator: ", ") + code
         case .joined:
             let others = players.filter { $0.id != Net.hostID }.map(\.name)
             return others.isEmpty ? "In \(hostName)'s game" : "In \(hostName)'s game · " + others.joined(separator: ", ")
@@ -283,8 +290,11 @@ extension Game {
         do {
             try host.start(name: "\(name)'s game")
         } catch {
-            show("Couldn't host: \(error.localizedDescription)")
-            return
+            // Without Wi-Fi hosting, an invite code still works.
+            if !Cloud.shared.available {
+                show("Couldn't host: \(error.localizedDescription)")
+                return
+            }
         }
         self.host = host
         myID = Net.hostID
@@ -295,8 +305,134 @@ extension Game {
         avatars.removeAll()
         lastSentPose = nil
         activate(.play)
-        show("Friends on this Wi-Fi can join \(name)'s game")
+        if Cloud.shared.available {
+            show("Friends on this Wi-Fi can join now. Making an invite code for friends far away…")
+            openInviteRoom()
+        } else {
+            show("Friends on this Wi-Fi can join \(name)'s game")
+        }
         Speaker.shared.say("Friends can join now")
+    }
+
+    // MARK: Invite codes (friends somewhere else)
+
+    /// A room with a fresh code for the next friend from far away.
+    func openInviteRoom() {
+        guard Cloud.shared.available, session == .hosting, cloudRoom == nil, (host?.friendCount ?? 0) < NetHost.maxFriends else { return }
+        let name = GameSettings.shared.playerNameText
+        Task { @MainActor [weak self] in
+            do {
+                let room = try await CloudRoom.host(name: name)
+                guard let self, self.session == .hosting, self.cloudRoom == nil else {
+                    room.close()
+                    return
+                }
+                self.cloudRoom = room
+                let code = CloudRoom.pretty(room.code)
+                self.inviteCode = code
+                room.onRequest = { [weak self] uid, who in
+                    guard let self else { return }
+                    self.joinRequest = JoinRequest(uid: uid, name: who)
+                    if self.screen == .playing { self.pause() }
+                    self.menuIndex = 0
+                    Sound.shared.play("friend-joined")
+                    Speaker.shared.say("\(who) wants to join")
+                }
+                room.onClose = { [weak self, weak room] in
+                    guard let self, let room, self.cloudRoom === room else { return }
+                    // The code stopped working (lost the connection): make another soon.
+                    self.cloudRoom = nil
+                    self.inviteCode = nil
+                    self.joinRequest = nil
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: 5_000_000_000)
+                        self?.openInviteRoom()
+                    }
+                }
+                self.show("Invite code: \(code). Tell a friend far away to pick it in Play together")
+            } catch {
+                self?.inviteCode = nil
+                self?.show("Couldn't make an invite code: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Yes: the friend from far away comes in, and there's a new code for the next one.
+    func letFriendIn() {
+        guard let request = joinRequest, let room = cloudRoom, let host else { return }
+        joinRequest = nil
+        cloudRoom = nil
+        inviteCode = nil
+        room.onClose = nil
+        host.adopt(room)
+        Task { @MainActor [weak self] in
+            do {
+                try await room.approve(request.uid)
+            } catch {
+                room.close()
+                self?.show("Couldn't let \(request.name) in: \(error.localizedDescription)")
+            }
+            self?.openInviteRoom()
+        }
+        if screen == .paused { activate(.resume) }
+        show("Letting \(request.name) in…")
+    }
+
+    func sayNoToFriend() {
+        guard let request = joinRequest else { return }
+        cloudRoom?.decline(request.uid)
+        joinRequest = nil
+        menuIndex = 0
+    }
+
+    /// The code picked on the Play together screen.
+    var typedCode: String {
+        CloudRoom.pretty(CloudRoom.words[codeWord] + "\(max(1, codeDigits[0]))\(codeDigits[1])")
+    }
+
+    /// Ask to join a friend's game somewhere else, with their invite code.
+    func joinWithCode() {
+        let code = typedCode.replacingOccurrences(of: "-", with: "")
+        let pretty = typedCode
+        save()   // your own world, before borrowing a friend's
+        stopLooking()
+        joinAttempt += 1
+        let attempt = joinAttempt
+        travelText = "Asking to join \(pretty)… they'll say yes on their screen"
+        let settings = GameSettings.shared
+        Task { @MainActor [weak self] in
+            do {
+                let room = try await CloudRoom.join(code: code, name: settings.playerNameText)
+                guard let self, self.joinAttempt == attempt else {
+                    room.close()
+                    return
+                }
+                room.onReady = { [weak room] in
+                    room?.send(.hello(version: Net.version, name: settings.playerNameText, color: settings.playerColor, crew: settings.crew))
+                }
+                room.onMessage = { [weak self] message in self?.clientReceived(message) }
+                room.onClose = { [weak self] in self?.lostHost(name: pretty) }
+                self.link = room
+                self.hostName = "your friend"
+                self.travelText = "Joining…"
+                room.start()
+                // Give up if the game never arrives.
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard self.joinAttempt == attempt, self.session != .joined, self.link === room else { return }
+                room.onClose = nil
+                room.close()
+                self.link = nil
+                self.travelText = nil
+                self.startLooking()
+                self.show("Couldn't reach that game")
+            } catch {
+                guard let self, self.joinAttempt == attempt else { return }
+                CloudRoom.cancelJoin(code: code)
+                self.travelText = nil
+                self.startLooking()
+                self.show(error.localizedDescription)
+            }
+        }
     }
 
     private func notes(for id: String) -> [VehicleNote] {
@@ -505,6 +641,11 @@ extension Game {
             link = nil
         case .hosting:
             saveOtherWorlds()
+            cloudRoom?.onClose = nil
+            cloudRoom?.close()
+            cloudRoom = nil
+            inviteCode = nil
+            joinRequest = nil
             host?.stop()
             host = nil
             session = .solo

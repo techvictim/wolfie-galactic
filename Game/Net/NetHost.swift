@@ -9,7 +9,7 @@ final class NetHost {
     var onFailed: (() -> Void)?
 
     private var listener: NWListener?
-    private var links: [Int: PeerLink] = [:]
+    private var links: [Int: any FriendLink] = [:]
     private var nextID = 1
     /// Up to this many friends at once, besides the host.
     static let maxFriends = 7
@@ -63,10 +63,14 @@ final class NetHost {
     }
 
     private func accept(_ connection: NWConnection) {
-        let link = PeerLink(connection: connection)
+        adopt(PeerLink(connection: connection))
+    }
+
+    /// A friend joining over Wi-Fi, or with an invite code from somewhere else.
+    func adopt(_ link: any FriendLink) {
         guard links.count < NetHost.maxFriends else {
             // The closure keeps the link alive until it has said why, then lets it go.
-            link.onReady = {
+            link.onReady = { [link] in
                 link.send(.refused(reason: "This game is full"))
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
