@@ -9,7 +9,7 @@ import simd
 /// pieces (towers, domes, streets…), each a box of space plus a rule for which block goes where.
 /// A chunk asks for the pieces that overlap it and paints just its part.
 struct Settlement: Sendable {
-    enum Kind: String, Sendable { case city, base, mine }
+    enum Kind: String, Sendable { case city, base, mine, military }
 
     let kind: Kind
     let center: SIMD2<Int>
@@ -17,6 +17,9 @@ struct Settlement: Sendable {
     let radius: Int
     let ground: Int
     let seed: UInt64
+
+    /// Cities and the military base are square; bases and mines are round.
+    var isSquare: Bool { kind == .city || kind == .military }
 
     /// A box of the world and how to paint it. nil leaves a block alone; air carves.
     struct Piece: Sendable {
@@ -99,6 +102,13 @@ extension TerrainGenerator {
     func settlement(cellX: Int, cellZ: Int) -> Settlement? {
         guard let kindName = planet.features.settlement, let kind = Settlement.Kind(rawValue: kindName) else { return nil }
         let cell = TerrainGenerator.settlementCell
+        // Wolfie Military's base has its own cell on the home planet.
+        let military = TerrainGenerator.militaryBase
+        if planet.id == TerrainGenerator.homePlanet, cellX == floorDiv(military.x, cell), cellZ == floorDiv(military.y, cell) {
+            let raw = Float(planet.terrain.base) + noise.fbm(Float(military.x) * planet.terrain.frequency, Float(military.y) * planet.terrain.frequency) * planet.terrain.amplitude
+            let ground = max(6, min(World.height - 62, Int(raw.rounded())))
+            return Settlement(kind: .military, center: military, radius: 46, ground: ground, seed: noise.seed &+ 4242)
+        }
         let radius = kind == .city ? 34 : 24
         let margin = radius + 14
         var center: SIMD2<Int>
@@ -125,6 +135,9 @@ extension TerrainGenerator {
 
     /// The first settlement: a short walk north-east of where you start.
     static let firstSettlement = SIMD2<Int>(92, -96)
+    /// Wolfie Military's base on Wolfie World: south-west of where you start.
+    static let militaryBase = SIMD2<Int>(-100, 100)
+    static let homePlanet = "wolfie-world"
 
     /// The settlement whose ground covers this column, if any (with its edge slope).
     func settlement(near x: Int, _ z: Int) -> Settlement? {
@@ -134,9 +147,11 @@ extension TerrainGenerator {
         guard planet.features.settlement != nil else { return nil }
         let first = TerrainGenerator.firstSettlement
         let isFirst = cx == floorDiv(first.x, cell) && cz == floorDiv(first.y, cell)
-        guard isFirst || noise.hash(cx &* 41 &+ 5, cz &* 23 &+ 9) < (planet.features.settlementChance ?? 0.3) else { return nil }
+        let military = TerrainGenerator.militaryBase
+        let isBase = planet.id == TerrainGenerator.homePlanet && cx == floorDiv(military.x, cell) && cz == floorDiv(military.y, cell)
+        guard isFirst || isBase || noise.hash(cx &* 41 &+ 5, cz &* 23 &+ 9) < (planet.features.settlementChance ?? 0.3) else { return nil }
         guard let site = settlement(cellX: cx, cellZ: cz) else { return nil }
-        let d = site.kind == .city
+        let d = site.isSquare
             ? max(abs(x - site.center.x), abs(z - site.center.y))
             : Int(simd_distance(SIMD2<Float>(Float(x), Float(z)), SIMD2<Float>(Float(site.center.x), Float(site.center.y))))
         return d <= site.radius + 10 ? site : nil
@@ -145,7 +160,7 @@ extension TerrainGenerator {
     /// Flatten the ground under a settlement, sloping back to the hills around it.
     func settlementHeight(_ x: Int, _ z: Int, natural: Float) -> Float {
         guard let site = settlement(near: x, z) else { return natural }
-        let d: Float = site.kind == .city
+        let d: Float = site.isSquare
             ? Float(max(abs(x - site.center.x), abs(z - site.center.y)))
             : simd_distance(SIMD2<Float>(Float(x), Float(z)), SIMD2<Float>(Float(site.center.x), Float(site.center.y)))
         let r = Float(site.radius)
@@ -264,6 +279,7 @@ enum Settlements {
         case .city: city(site, planet: planet, into: &builder)
         case .base: base(site, planet: planet, mine: false, into: &builder)
         case .mine: base(site, planet: planet, mine: true, into: &builder)
+        case .military: military(site, planet: planet, into: &builder)
         }
         let plan = Plan(pieces: builder.pieces, nests: builder.nests)
         cache.lock.lock()
@@ -578,5 +594,182 @@ enum Settlements {
                 (x + y + z) % 3 == 0 && y == g + 2 ? nil : B.crate
             })
         }
+    }
+    // MARK: Wolfie Military's base
+
+    private static func military(_ site: Settlement, planet: Planet, into plan: inout PlanBuilder) {
+        let g = site.ground
+        let L = MilitaryLayout.self
+        let x0 = site.center.x - site.radius, z0 = site.center.y - site.radius
+        let n = L.size
+        let gateX = x0 + n / 2
+        let surface = planet.terrain.surface
+
+        // Tarmac everywhere, a grassy drill yard, and clear air above.
+        plan.add(box(SIMD3(x0, g - 1, z0), SIMD3(x0 + n + 1, g + 1, z0 + n + 1)) { x, y, z in
+            if y == g { return B.air }
+            let lx = x - x0, lz = z - z0
+            if L.yard.contains(lx, lz) { return surface }
+            // The road in from the gate, with a yellow line.
+            if abs(x - gateX) <= 3 && lz < L.yard.z0 { return x == gateX && lz % 4 < 2 ? SB.roadLine : SB.road }
+            return (lx / 6 + lz / 6) % 2 == 0 ? SB.road : B.metal
+        })
+
+        // The runway: long, with a dashed centre line, edge lights and stripes at both ends.
+        let rw = L.runway
+        plan.add(box(SIMD3(x0 + rw.x0, g - 1, z0 + rw.z0), SIMD3(x0 + rw.x1, g + 1, z0 + rw.z1)) { x, y, z in
+            let lx = x - x0, lz = z - z0
+            let edge = lz == rw.z0 || lz == rw.z1 - 1
+            if y == g { return edge && lx % 6 == 0 ? B.lamp : B.air }
+            let mid = (rw.z0 + rw.z1) / 2
+            if lx < rw.x0 + 4 || lx >= rw.x1 - 4 { return (lz - rw.z0) % 2 == 1 && !edge ? SB.white : SB.road }
+            if lz == mid && lx % 8 < 4 { return SB.white }
+            return SB.road
+        })
+
+        // The helipad.
+        plan.add(landingPad(x0: x0 + L.helipad.x, z0: z0 + L.helipad.y, size: 13, ground: g))
+
+        // An electric fence all the way round, with a gap for the main gate.
+        plan.add(box(SIMD3(x0, g, z0), SIMD3(x0 + n + 1, g + 5, z0 + n + 1)) { x, y, z in
+            let lx = x - x0, lz = z - z0
+            let onEdge = lx == 0 || lx == n || lz == 0 || lz == n
+            guard onEdge else { return nil }
+            if lz == 0 && abs(x - gateX) <= 4 { return nil }
+            let along = (lx == 0 || lx == n) ? lz : lx
+            let k = y - g
+            if along % 5 == 0 { return k == 4 ? B.lamp : B.metal }
+            return k == 1 || k == 3 ? SB.neonCyan : nil
+        })
+
+        // The main gate: an arch with lights and a striped bar, between two guard towers.
+        plan.add(box(SIMD3(gateX - 6, g, z0 - 1), SIMD3(gateX + 7, g + 10, z0 + 2), far: g + 9, farBlock: SB.white) { x, y, z in
+            let dx = abs(x - gateX), k = y - g
+            if dx >= 5 { return k <= 8 ? (k == 8 ? B.lamp : SB.white) : nil }
+            if k == 7 { return z == z0 ? (dx % 2 == 0 ? SB.neonPink : SB.white) : SB.white }
+            if k == 8 && z == z0 && dx <= 3 { return SB.neonCyan }
+            if k == 2 && z == z0 + 1 && dx <= 4 { return dx % 2 == 0 ? SB.white : SB.neonPink }   // the barrier
+            return nil
+        })
+        for (gx, gz) in [(gateX - 9, z0 + 1), (gateX + 9, z0 + 1), (x0 + 2, z0 + 2), (x0 + n - 2, z0 + 2), (x0 + 2, z0 + n - 2), (x0 + n - 2, z0 + n - 2)] {
+            plan.add(guardTower(cx: gx, cz: gz, ground: g))
+        }
+
+        // The armory: thick metal walls, a wide door, racks of crates inside.
+        let a = L.armory
+        plan.building([box(SIMD3(x0 + a.x0, g, z0 + a.z0), SIMD3(x0 + a.x1, g + 8, z0 + a.z1), far: g + 8, farBlock: B.metal) { x, y, z in
+            let lx = x - x0, lz = z - z0, k = y - g
+            let ex = lx == a.x0 || lx == a.x1 - 1, ez = lz == a.z0 || lz == a.z1 - 1
+            if k == 7 { return ex || ez ? SB.neonPink : B.metal }
+            if ex || ez {
+                // Door on the south side, facing the yard.
+                if lz == a.z1 - 1 && abs(lx - (a.x0 + a.x1) / 2) <= 1 && k >= 1 && k <= 3 { return B.air }
+                if k == 5 && !(ex && ez) && (lx + lz) % 3 == 0 { return SB.nightGlass }
+                return B.metal
+            }
+            if k == 0 { return SB.white }
+            // Crates along the inside walls.
+            let rack = lx == a.x0 + 1 || lx == a.x1 - 2 || lz == a.z0 + 1
+            return rack && k <= 2 ? B.crate : B.air
+        }], name: "Armory", nest: false)
+
+        // Barracks: long and low with windows and a teal roof.
+        let br = L.barracks
+        plan.building([box(SIMD3(x0 + br.x0, g, z0 + br.z0), SIMD3(x0 + br.x1, g + 7, z0 + br.z1), far: g + 7, farBlock: SB.roofTeal) { x, y, z in
+            let lx = x - x0, lz = z - z0, k = y - g
+            let ex = lx == br.x0 || lx == br.x1 - 1, ez = lz == br.z0 || lz == br.z1 - 1
+            if k == 6 { return SB.roofTeal }
+            if ex || ez {
+                if lz == br.z1 - 1 && (lx - br.x0) % 8 == 4 && k >= 1 && k <= 3 { return B.air }   // doors
+                if (k == 2 || k == 3) && (lx + lz) % 3 != 0 && !(ex && ez) { return SB.nightGlass }
+                return SB.white
+            }
+            return k == 0 ? SB.white : B.air
+        }], name: "Barracks", nest: false)
+
+        // Headquarters: a tower with a radar dish on top.
+        let hq = L.hq
+        plan.building(tower(x0: x0 + hq.x, z0: z0 + hq.y, w: 10, d: 10, ground: g, height: 22, neon: SB.neonCyan), name: "Headquarters", nest: false)
+        let rx = x0 + hq.x + 5, rz = z0 + hq.y + 5, rTop = g + 28
+        plan.add(box(SIMD3(rx - 3, rTop, rz - 3), SIMD3(rx + 4, rTop + 4, rz + 4), far: rTop + 3, farBlock: SB.white) { x, y, z in
+            let dx = x - rx, dz = z - rz, k = y - rTop
+            if dx == 0 && dz == 0 { return k == 3 ? B.lamp : B.metal }
+            // A tilted dish facing south.
+            let tilt = dz + 1
+            return k == max(0, min(3, tilt)) && dx * dx + dz * dz <= 9 && dz >= -1 ? SB.white : nil
+        })
+
+        // Hangars facing the runway, open at the front.
+        for hx in L.hangars {
+            let hz0 = L.hangarZ0, hz1 = L.hangarZ1
+            plan.building([box(SIMD3(x0 + hx, g, z0 + hz0), SIMD3(x0 + hx + L.hangarWidth, g + 11, z0 + hz1), far: g + 10, farBlock: B.metal) { x, y, z in
+                let lx = x - x0 - hx, lz = z - z0, k = y - g
+                let w = L.hangarWidth
+                // A curved roof: higher in the middle.
+                let fromMiddle = abs(Float(lx) - Float(w - 1) / 2)
+                let roof = 10 - Int(fromMiddle * fromMiddle / 9)
+                if k > roof { return nil }
+                if k == roof { return lx % 4 == 0 ? SB.neonCyan : B.metal }
+                if lx == 0 || lx == w - 1 { return k % 3 == 2 ? SB.nightGlass : B.metal }
+                if lz == hz0 { return B.metal }
+                if lz == hz1 - 1 && k == roof - 1 { return SB.white }   // a beam over the open door
+                return k == 0 ? SB.white : B.air
+            }], name: "Hangar", nest: false)
+        }
+
+        // A flagpole in the middle of the yard, with a pink-and-white flag.
+        let fx = x0 + L.flag.x, fz = z0 + L.flag.y
+        plan.add(box(SIMD3(fx, g, fz), SIMD3(fx + 6, g + 13, fz + 1), far: g + 12, farBlock: SB.neonPink) { x, y, _ in
+            let k = y - g, dx = x - fx
+            if dx == 0 { return k == 12 ? B.lamp : B.metal }
+            guard k >= 8 && k <= 11 else { return nil }
+            return (k + dx) % 2 == 0 ? SB.neonPink : SB.white
+        })
+
+        // Obstacle course in the yard: low walls to jump over.
+        let yd = L.yard
+        plan.add(box(SIMD3(x0 + yd.x0 + 2, g, z0 + yd.z1 - 4), SIMD3(x0 + yd.x1 - 2, g + 2, z0 + yd.z1 - 1)) { x, _, z in
+            (x - x0) % 5 == 0 && z == z0 + yd.z1 - 3 ? SB.white : nil
+        })
+    }
+
+    /// A small lookout tower: four legs, a platform and a lamp.
+    private static func guardTower(cx: Int, cz: Int, ground g: Int) -> Settlement.Piece {
+        box(SIMD3(cx - 1, g, cz - 1), SIMD3(cx + 2, g + 10, cz + 2), far: g + 9, farBlock: B.metal) { x, y, z in
+            let k = y - g
+            let corner = x != cx && z != cz
+            if k == 6 { return SB.white }
+            if k == 7 { return corner ? B.metal : nil }
+            if k == 8 { return x == cx && z == cz ? nil : (corner ? SB.neonCyan : nil) }
+            if k == 9 { return x == cx && z == cz ? B.lamp : nil }
+            return corner ? B.metal : nil
+        }
+    }
+}
+
+/// Where things are at the military base, from its north-west corner. Shared by the building
+/// plans and the troops, drones and parked vehicles.
+enum MilitaryLayout {
+    struct Area: Sendable {
+        let x0, z0, x1, z1: Int
+        func contains(_ x: Int, _ z: Int) -> Bool { x >= x0 && x < x1 && z >= z0 && z < z1 }
+        var center: SIMD2<Float> { SIMD2(Float(x0 + x1) / 2, Float(z0 + z1) / 2) }
+    }
+    static let size = 92
+    static let armory = Area(x0: 6, z0: 8, x1: 22, z1: 22)
+    static let barracks = Area(x0: 6, z0: 26, x1: 26, z1: 36)
+    static let hq = SIMD2<Int>(60, 8)
+    static let helipad = SIMD2<Int>(74, 8)
+    static let yard = Area(x0: 30, z0: 24, x1: 62, z1: 44)
+    static let flag = SIMD2<Int>(46, 22)
+    static let hangars = [8, 30, 52]
+    static let hangarWidth = 18
+    static let hangarZ0 = 48
+    static let hangarZ1 = 62
+    static let runway = Area(x0: 4, z0: 72, x1: 88, z1: 84)
+
+    /// The base's north-west corner, in the world.
+    static var origin: SIMD2<Int> {
+        TerrainGenerator.militaryBase &- SIMD2(repeating: size / 2)
     }
 }

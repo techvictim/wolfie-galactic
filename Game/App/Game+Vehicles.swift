@@ -20,9 +20,9 @@ extension Game {
         Sound.shared.stopLoop(channel: "engine")
         vehicles.removeAll()
 
-        func add(_ kind: VehicleKind, at base: SIMD2<Int>, dx: Int = 0, dz: Int = 0, yaw: Float) {
-            guard vehicles[kind.rawValue] == nil else { return }
-            var v = Vehicle(kind: kind, position: SIMD3<Float>(Float(base.x + dx) + 0.5, 0, Float(base.y + dz) + 0.5), yaw: yaw)
+        func add(_ kind: VehicleKind, at base: SIMD2<Int>, dx: Int = 0, dz: Int = 0, yaw: Float, id: String? = nil) {
+            guard vehicles[id ?? kind.rawValue] == nil else { return }
+            var v = Vehicle(kind: kind, position: SIMD3<Float>(Float(base.x + dx) + 0.5, 0, Float(base.y + dz) + 0.5), yaw: yaw, id: id)
             settle(&v)
             vehicles[v.id] = v
         }
@@ -30,6 +30,18 @@ extension Game {
         if planet.id == PlanetCatalog.shared.homeID {
             let spawn = world.spawnPoint()
             add(.rover, at: SIMD2(Int(floor(spawn.x)), Int(floor(spawn.z))), dx: 5, dz: -3, yaw: -.pi / 2)
+            // Wolfie Military's base: one of every vehicle, parked and ready. Ships wait on the
+            // apron in front of the hangars, facing the runway.
+            let o = MilitaryLayout.origin
+            let apron = MilitaryLayout.hangarZ1 + 5
+            let w = MilitaryLayout.hangarWidth / 2
+            let ships: [(VehicleKind, Int, Int)] = [
+                (.starship, MilitaryLayout.hangars[0] + w, apron), (.comet, MilitaryLayout.hangars[1] + w, apron),
+                (.hauler, MilitaryLayout.hangars[2] + w, apron), (.zoomer, 80, apron),
+            ]
+            for (kind, x, z) in ships { add(kind, at: o, dx: x, dz: z, yaw: .pi, id: "\(kind.rawValue)-base") }
+            let ground: [(VehicleKind, Int)] = [(.rover, 30), (.buggy, 36), (.hoverbike, 42)]
+            for (kind, x) in ground { add(kind, at: o, dx: x, dz: 15, yaw: .pi, id: "\(kind.rawValue)-base") }
         }
         // Vehicles this planet starts with (planets.json "vehicles").
         for spot in planet.vehicles ?? [] {

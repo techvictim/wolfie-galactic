@@ -183,6 +183,38 @@ final class CrewRig {
         }
     }
 
+    /// Exercises at the military base: "jacks" (jumping jacks), "squat", or "salute".
+    /// Returns how high to lift the whole figure this moment.
+    func exercise(_ kind: String, clock t: Float) -> Float {
+        blaster.isEnabled = heldStyle != nil
+        head.orientation = simd_quatf(angle: 0, axis: SIMD3(1, 0, 0))
+        body.orientation = simd_quatf(angle: 0, axis: SIMD3(1, 0, 0))
+        flames.isEnabled = false
+        let x = SIMD3<Float>(1, 0, 0), z = SIMD3<Float>(0, 0, 1)
+        switch kind {
+        case "jacks":
+            let k = (1 - cos(t * 6.5)) / 2          // 0 together ... 1 spread
+            armL.orientation = simd_quatf(angle: -2.7 * k, axis: z)
+            armR.orientation = simd_quatf(angle: 2.7 * k, axis: z)
+            legL.orientation = simd_quatf(angle: -0.35 * k, axis: z)
+            legR.orientation = simd_quatf(angle: 0.35 * k, axis: z)
+            return abs(sin(t * 6.5)) * 0.12
+        case "squat":
+            let k = (1 - cos(t * 3.2)) / 2
+            armL.orientation = simd_quatf(angle: 1.5 * k, axis: x)
+            armR.orientation = simd_quatf(angle: 1.5 * k, axis: x)
+            legL.orientation = simd_quatf(angle: 0.9 * k, axis: x)
+            legR.orientation = simd_quatf(angle: 0.9 * k, axis: x)
+            return -0.22 * k
+        default:   // salute
+            armL.orientation = simd_quatf(angle: 0, axis: x)
+            armR.orientation = simd_quatf(angle: 2.4, axis: x) * simd_quatf(angle: 0.6, axis: SIMD3(0, 1, 0))
+            legL.orientation = simd_quatf(angle: 0, axis: x)
+            legR.orientation = simd_quatf(angle: 0, axis: x)
+            return 0
+        }
+    }
+
     /// A hammer swing.
     func swing() {
         swingTime = 0.28

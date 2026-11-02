@@ -84,7 +84,7 @@ struct TerrainGenerator: Sendable {
         // Roads out of the settlement in this cell, and around it.
         if planet.features.settlement != nil, let site = settlement(cellX: floorDiv(x, cell), cellZ: floorDiv(z, cell)) {
             let cx = site.center.x, cz = site.center.y
-            let square = site.kind == .city
+            let square = site.isSquare
             let d = square ? max(abs(x - cx), abs(z - cz))
                            : Int(simd_distance(SIMD2<Float>(Float(x), Float(z)), SIMD2<Float>(Float(cx), Float(cz))))
             if d <= site.radius + 1 { return nil }     // the settlement's own streets
@@ -100,13 +100,19 @@ struct TerrainGenerator: Sendable {
     /// The road's height: the land, smoothed along the road so hills become gentle slopes.
     private func roadHeight(_ spot: RoadSpot) -> Float {
         if let ground = spot.ground { return ground }
-        var sum: Float = 0
-        for k in -2...2 {
-            let a = (spot.along / 8) * 8 + k * 10
-            sum += spot.alongX ? baseHeight(a, spot.line) : baseHeight(spot.line, a)
+        // The land averaged over about 90 blocks of road, worked out every 8 blocks and
+        // blended in between, so the road climbs in gentle, even slopes.
+        func smooth(_ a: Int) -> Float {
+            var sum: Float = 0
+            for k in -4...4 {
+                let p = a + k * 10
+                sum += spot.alongX ? baseHeight(p, spot.line) : baseHeight(spot.line, p)
+            }
+            return sum / 9
         }
-        // Stay put between samples, so the road is steady.
-        return (sum / 5).rounded()
+        let a0 = floorDiv(spot.along, 8) * 8
+        let t = Float(spot.along - a0) / 8
+        return smooth(a0) * (1 - t) + smooth(a0 + 8) * t
     }
 
     private static let craterCell = 24

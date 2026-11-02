@@ -149,6 +149,8 @@ final class Game {
     /// The Red Glitch (see Game+Glitch.swift).
     @ObservationIgnored let glitch = GlitchState()
     @ObservationIgnored let roboCats = RoboCats()
+    /// Troops and drones at the military base.
+    @ObservationIgnored let baseLife = BaseLife()
     /// Blocks falling down (see Game+Falling.swift).
     @ObservationIgnored let falling = FallingBlocks()
 
@@ -304,6 +306,7 @@ final class Game {
         root.addChild(effects.root)
         root.addChild(armory.root)
         root.addChild(roboCats.root)
+        root.addChild(baseLife.root)
         root.addChild(falling.root)
         root.addChild(pickups.root)
         root.addChild(ghost)
@@ -367,6 +370,7 @@ final class Game {
         skyBodies.addChild(SkyDecor.build(for: planet, radius: Game.skyRadius))
 
         placeVehicles()
+        baseLife.setup(world: world, planet: planet)
         syncCamera()
     }
 
@@ -469,6 +473,7 @@ final class Game {
             updateGlitch(dt: dt)
             updateFalling(dt: dt)
             updateDayCycle(dt: dt)
+            baseLife.update(dt: dt, viewer: camera.position)
         } else {
             stopGlitchHum()
         }

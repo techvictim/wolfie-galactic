@@ -147,6 +147,7 @@ extension Game {
         case .city: return "Wolfie City"
         case .base: return "Moon Base"
         case .mine: return "Crystal Mine"
+        case .military: return "Wolfie Military Base"
         }
     }
 
