@@ -4,9 +4,8 @@ import simd
 
 /// Wolfie Station: fly into it from space, land in the hangar, swap ships, fly back out.
 extension Game {
-    /// Where the station sits in space around Wolfie World, and how close counts as flying in.
-    static var stationCenter: SIMD3<Float> { SpaceScene.spaceportPosition + SIMD3(0, 18, 0) }
-    static let stationEntryDistance: Float = 28
+    /// Where the station sits in space around Wolfie World.
+    static var stationCenter: SIMD3<Float> { SpaceScene.stationCenter }
 
     var stationPlanet: Planet? {
         PlanetCatalog.shared.stationID.flatMap { PlanetCatalog.shared.planet(id: $0) }
@@ -60,20 +59,22 @@ extension Game {
         traffic.add(kinds[3], path: circle)
     }
 
-    /// Ships in space looping in and out of the station.
+    /// Ships in space flying in and out of the station's hangar door.
     func setupSpaceTraffic() {
         spaceTraffic.clear()
-        let c = Game.stationCenter
+        let mouth = SpaceScene.hangarMouth, d = SpaceScene.hangarDirection, side = SpaceScene.hangarSide
         typealias W = ShipTraffic.Waypoint
         for (i, kind) in [VehicleKind.hauler, .comet, .zoomer].enumerated() {
-            let a = Float(i) * 2.1 + 0.4
-            let out = c + SIMD3(cos(a) * 500, 60 + Float(i) * 40, sin(a) * 500)
-            let back = c + SIMD3(cos(a + 1.2) * 520, -40 + Float(i) * 30, sin(a + 1.2) * 520)
+            let lane = side * (Float(i) - 1) * 5
+            let far = mouth + d * 420 + side * (Float(i) - 1) * 260 + SIMD3(0, Float(i) * 60 - 50, 0)
+            let away = mouth + d * 420 - side * (Float(i) - 1) * 300 + SIMD3(0, 70 - Float(i) * 50, 0)
             spaceTraffic.add(kind, path: [
-                W(at: out, time: 0),
-                W(at: c + SIMD3(cos(a) * 30, 10, sin(a) * 30), time: 16, wait: 4),
-                W(at: back, time: 16),
-            ], start: Float(i) * 12)
+                W(at: far, time: 0),
+                W(at: mouth + d * 60 + lane, time: 14),
+                W(at: mouth - d * 14 + lane, time: 5, wait: 5),
+                W(at: mouth + d * 60 + lane, time: 5),
+                W(at: away, time: 14),
+            ], start: Float(i) * 15)
         }
     }
 
@@ -96,18 +97,86 @@ extension Game {
         return out > 190 || v.position.y > Float(StationPlan.deck) + 75 || v.position.y < 4
     }
 
-    /// In space near Wolfie World: fly into the station to land in it.
-    func checkStationEntry(_ v: Vehicle) -> Bool {
+    /// In space near Wolfie World: fly in through the hangar door to land inside. The rest of
+    /// the station is solid.
+    func checkStationEntry(_ v: inout Vehicle) -> Bool {
         guard space.planetID == PlanetCatalog.shared.homeID, let station = stationPlanet, !spaceTransition else { return false }
         let d = simd_distance(v.position, Game.stationCenter)
-        if d < 140 && !stationHinted {
+        if d < 260 && !stationHinted {
             stationHinted = true
-            show("Fly into Wolfie Station to land in its hangar")
+            show("Wolfie Station! Fly in through the glowing hangar door, between the lights")
         }
-        if d > 220 { stationHinted = false }
-        guard d < Game.stationEntryDistance else { return false }
-        enteringStation = true
-        enterAtmosphere(v, to: station)
-        return true
+        if d > 400 { stationHinted = false }
+        guard d < 140 else { return false }
+        let rel = v.position - SpaceScene.hangarMouth
+        let along = simd_dot(rel, SpaceScene.hangarDirection)
+        let across = abs(simd_dot(rel, SpaceScene.hangarSide))
+        let up = abs(rel.y)
+        if along < 3 && along > -20 && across < SpaceScene.mouthHalfWidth - 1 && up < SpaceScene.mouthHalfHeight - 1 {
+            enteringStation = true
+            fadeEntry = true
+            v.speed = min(v.speed, v.kind.topSpeed * 0.3)
+            enterAtmosphere(v, to: station)
+            return true
+        }
+        bumpStation(&v)
+        return false
+    }
+
+    /// Keep ships out of the station's ring, hub and hangar walls.
+    private func bumpStation(_ v: inout Vehicle) {
+        let c = Game.stationCenter
+        let margin: Float = 3
+        var p = v.position
+        var hit = false
+        // The big ring (a flat doughnut, 34 out, about 5 thick).
+        let rel = p - c
+        let flat = SIMD2(rel.x, rel.z)
+        let out = simd_length(flat)
+        if out > 0.01 {
+            let q = out - 34
+            let tube = SIMD2(q, rel.y)
+            let t = simd_length(tube)
+            if t < 4.8 + margin, t > 0.001 {
+                let push = tube / t * (4.8 + margin)
+                let newOut = 34 + push.x
+                let dir = flat / out
+                p = c + SIMD3(dir.x * newOut, push.y, dir.y * newOut)
+                hit = true
+            }
+        }
+        // The hub in the middle.
+        let r2 = p - c
+        let hubOut = simd_length(SIMD2(r2.x, r2.z))
+        if hubOut < 11 + margin, abs(r2.y) < 14 + margin, hubOut > 0.01 {
+            let dir = SIMD2(r2.x, r2.z) / hubOut
+            p = c + SIMD3(dir.x * (11 + margin), r2.y, dir.y * (11 + margin))
+            hit = true
+        }
+        // The hangar: a long box out from the ring to the door.
+        let h = p - c
+        let along = simd_dot(h, SpaceScene.hangarDirection)
+        let across = simd_dot(h, SpaceScene.hangarSide)
+        let up = h.y - 1
+        let hw = SpaceScene.mouthHalfWidth + margin, hh = SpaceScene.mouthHalfHeight + margin
+        if along > 36 - margin, along < 60, abs(across) < hw, abs(up) < hh {
+            // Out the nearest side (the door end is handled by flying in).
+            let gaps = [(hw - abs(across), 0), (hh - abs(up), 1), (along - (36 - margin), 2)]
+            let nearest = gaps.min { $0.0 < $1.0 }!
+            switch nearest.1 {
+            case 0: p += SpaceScene.hangarSide * (across >= 0 ? nearest.0 : -nearest.0)
+            case 1: p.y += up >= 0 ? nearest.0 : -nearest.0
+            default: p -= SpaceScene.hangarDirection * nearest.0
+            }
+            hit = true
+        }
+        if hit {
+            v.position = p
+            if abs(v.speed) > v.kind.topSpeed * 0.2 {
+                Sound.shared.play("bump", volume: 0.6)
+                armory.shake = max(armory.shake, 0.3)
+            }
+            v.speed *= 0.4
+        }
     }
 }

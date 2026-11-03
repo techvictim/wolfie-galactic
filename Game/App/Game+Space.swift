@@ -43,17 +43,16 @@ extension Game {
         // The station orbits Wolfie World: leaving it puts you in space beside it.
         let fromStation = planet.isStation
         space.setPlanet(fromStation ? PlanetCatalog.shared.homeID : planet.id)
-        space.showDocks(docks)
         setSurfaceVisible(false)
         spaceTraffic.root.isEnabled = space.planetID == PlanetCatalog.shared.homeID
 
         var ship: Vehicle
         if fromStation {
-            // Out of the hangar, heading away from the station the way you were going.
-            let away = SIMD3<Float>(-sin(v.yaw), 0, -cos(v.yaw))
-            ship = Vehicle(kind: v.kind, position: Game.stationCenter + away * 70 + SIMD3(0, 6, 0), yaw: v.yaw, id: v.id)
-            ship.pitch = 0.05
-            ship.speed = v.kind.topSpeed * 0.7
+            // Out through the hangar door, heading away from the station.
+            let d = SpaceScene.hangarDirection
+            ship = Vehicle(kind: v.kind, position: SpaceScene.hangarMouth + d * 25, yaw: atan2(-d.x, -d.z), id: v.id)
+            ship.pitch = 0
+            ship.speed = v.kind.topSpeed * 0.5
         } else {
             // Come out above the planet, climbing away from it.
             let r = space.planetRadius
@@ -108,17 +107,10 @@ extension Game {
             return
         }
 
-        // Y: swap ships at the spaceport, or a reminder that there's no air out here.
-        let dock = nearbyDock(v)
-        if dockPrompt != dock.map({ docks[$0] ?? .starship }) {
-            dockPrompt = dock.map { docks[$0] ?? .starship }
-        }
+        // A reminder that there's no air out here. (Other ships wait inside Wolfie Station.)
+        if dockPrompt != nil { dockPrompt = nil }
         if frame.openMap || frame.usePressed {
-            if let dock, let other = docks[dock] {
-                swapShip(&v, dock: dock, for: other)
-            } else {
-                show("No getting out in space: there's no air!")
-            }
+            show("No getting out in space: there's no air! Land in Wolfie Station to swap ships")
         }
         // Pointing at another planet: □ jumps straight there. Otherwise □ opens the star map.
         let target = targetedPlanet(v)
@@ -146,10 +138,8 @@ extension Game {
 
         spaceTraffic.root.isEnabled = space.planetID == PlanetCatalog.shared.homeID
         spaceTraffic.update(dt: dt)
-        if checkStationEntry(v) {
-            spaceShip = v
-            space.showShip(v)
-        }
+        space.updateStationLights(dt: dt)
+        _ = checkStationEntry(&v)
 
         let thrust = min(1, abs(v.speed) / (v.kind.topSpeed * 2))
         Sound.shared.startLoop("ship-engine", channel: "engine", volume: 0.15, pitch: 0.8)
@@ -179,43 +169,6 @@ extension Game {
 
     // MARK: The spaceport
 
-    private func nearbyDock(_ v: Vehicle) -> Int? {
-        guard space.planetID == PlanetCatalog.shared.homeID else { return nil }
-        var best: (Int, Float)?
-        for i in 0..<SpaceScene.padCount where docks[i] != nil {
-            let d = simd_distance(v.position, SpaceScene.padPosition(i))
-            if d < 26 && (best == nil || d < best!.1) { best = (i, d) }
-        }
-        return best?.0
-    }
-
-    /// Leave your ship on the pad and take the one that was there.
-    private func swapShip(_ v: inout Vehicle, dock: Int, for kind: VehicleKind) {
-        var newDocks = docks
-        newDocks[dock] = v.kind
-        docks = newDocks
-        let angle = Float(dock) * 2 * .pi / 3
-        var ship = Vehicle(kind: kind, position: SpaceScene.padPosition(dock) + SIMD3<Float>(0, 2, 0), yaw: atan2(-cos(angle), -sin(angle)), id: Vehicle.newID(kind))
-        ship.pitch = 0.1
-        v = ship
-        space.showDocks(docks)
-        chaseEye = nil
-        Sound.shared.play("vehicle-in", volume: 0.8)
-        show("You're flying the \(kind.name)!")
-        Speaker.shared.say(kind.name)
-    }
-
-    /// Which ship waits on each spaceport pad. Remembered between games.
-    var docks: [VehicleKind?] {
-        get {
-            let saved = UserDefaults.standard.stringArray(forKey: "spaceportDocks") ?? ["comet", "hauler", "zoomer"]
-            return (0..<SpaceScene.padCount).map { i in i < saved.count ? VehicleKind(rawValue: saved[i]) : nil }
-        }
-        set {
-            UserDefaults.standard.set(newValue.map { $0?.rawValue ?? "" }, forKey: "spaceportDocks")
-        }
-    }
-
     // MARK: Hyperspace
 
     /// Chosen on the star map while in space.
@@ -244,8 +197,7 @@ extension Game {
         if t > 1.6, let target = hyperspaceTarget, space.planetID != target.id {
             // Arrive in front of the new planet, pointing at it.
             space.setPlanet(target.id)
-            space.showDocks(docks)
-            let r = space.planetRadius
+                let r = space.planetRadius
             v = Vehicle(kind: v.kind, position: SIMD3<Float>(0, r * 0.4, r * 3.2), yaw: 0, id: v.id)
             v.pitch = -0.1
             v.speed = v.kind.topSpeed
@@ -280,10 +232,15 @@ extension Game {
     /// the view, then clear to show the planet's sky, still dark up high, brightening as you dive.
     func enterAtmosphere(_ v: Vehicle, to destination: Planet) {
         spaceTransition = true
-        entryGlow = true
         entryTime = 0
         hyperTarget = nil
-        Sound.shared.play("entry", volume: 0.9)
+        if enteringStation {
+            // Into the hangar: no fire and clouds, just a quick fade.
+            Sound.shared.play("vehicle-in", volume: 0.7)
+        } else {
+            entryGlow = true
+            Sound.shared.play("entry", volume: 0.9)
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
             // In a friend's game, the host sends the planet; it's quick on home Wi-Fi.
@@ -302,15 +259,16 @@ extension Game {
     func updateEntry(dt: Float) {
         if entryTime >= 0 {
             entryTime += dt
-            let veil = min(1, max(0, (entryTime - 0.6) / 1.1))
+            let veil = enteringStation ? min(1, entryTime / 0.45) : min(1, max(0, (entryTime - 0.6) / 1.1))
             if abs(veil - entryVeil) > 0.01 { entryVeil = veil }
         } else if entryTime <= -2 {
-            let veil = max(0, entryVeil - dt / 1.8)
+            let veil = max(0, entryVeil - dt / (fadeEntry ? 0.6 : 1.8))
             entryVeil = veil
             if veil < 0.6 && entryGlow { entryGlow = false }
             if veil <= 0 {
                 entryTime = -1
                 spaceTransition = false
+                fadeEntry = false
             }
         }
     }
@@ -334,10 +292,10 @@ extension Game {
         ship.pitch = -0.38
         ship.speed = kind.topSpeed * 0.8
         if destination.isStation {
-            // Gliding in toward the hangar's open south end.
-            ship.position = SIMD3<Float>(0, Float(StationPlan.deck) + 16, 150)
-            ship.pitch = -0.03
-            ship.speed = kind.topSpeed * 0.45
+            // Just inside the hangar's open end, hovering, ready to land.
+            ship.position = SIMD3<Float>(0, Float(StationPlan.deck) + 7, Float(StationPlan.hangarHalfDepth) - 3)
+            ship.pitch = 0
+            ship.speed = 0
         }
         ship.onGround = false
         // If the planet's own starship was waiting on the pad, yours (with the same id) takes its place.

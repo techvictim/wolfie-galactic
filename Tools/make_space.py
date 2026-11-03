@@ -172,16 +172,35 @@ RING = 17
 PADS = [(RING + 6, 0.0), (RING + 6, 2 * math.pi / 3), (RING + 6, 4 * math.pi / 3)]   # (distance, angle)
 
 def spaceport():
+    """The ring station, with one big hangar sticking out along +x: open at the end, with a
+    glowing frame round the door and arrows on its floor. (The game turns the whole station
+    so the hangar door faces out, away from Wolfie World.)"""
     prims = []
     prims += ring_windows(RING, 0.0, 40)
-    # Docking pads sticking out of the ring: flat decks with yellow edge lines.
-    for dist, a in PADS:
-        cx, cz = math.cos(a) * dist, math.sin(a) * dist
-        prims.append(("frame", (cx - 5, -1.2, cz - 5), (cx + 5, -0.6, cz + 5), 0.5, "padline"))
-        prims.append(box((cx - 5, -1.2, cz - 5), (cx + 5, -0.6, cz + 5), "pad"))
-        # An arm joining the pad to the ring.
-        ax, az = math.cos(a) * (RING + 2), math.sin(a) * (RING + 2)
-        prims.append(box((min(ax, cx) - 1, -1.4, min(az, cz) - 1), (max(ax, cx) + 1, -0.4, max(az, cz) + 1), "darksteel"))
+    # The hangar: a long box with a dark inside, open at the far end (x = 30).
+    x0, x1, y0, y1, zw = 18, 30, -4, 5, 6
+    glow = [
+        box((x1 - 0.5, y0, -zw), (x1, y0 + 0.6, zw), "glowring"),
+        box((x1 - 0.5, y1 - 0.6, -zw), (x1, y1, zw), "glowring"),
+        box((x1 - 0.5, y0, -zw), (x1, y1, -zw + 0.6), "glowring"),
+        box((x1 - 0.5, y0, zw - 0.6), (x1, y1, zw), "glowring"),
+    ]
+    arrows = []
+    for i in range(4):
+        ax = x0 + 2 + i * 2.6
+        arrows.append(box((ax, y0 + 0.6, -0.5), (ax + 1.2, y0 + 0.75, 0.5), "padline"))
+        arrows.append(box((ax + 0.6, y0 + 0.6, -1.6), (ax + 1.2, y0 + 0.75, 1.6), "padline"))
+    lights = [box((x, y1 - 1.1, -0.4), (x + 0.6, y1 - 0.9, 0.4), "window") for x in (20, 23, 26)]
+    prims += glow + arrows + lights + [
+        box((x0, y0, -zw), (x1, y0 + 0.6, zw), "darksteel"),          # floor
+        box((x0, y1 - 0.6, -zw), (x1, y1, zw), "hullwhite"),          # roof
+        box((x0, y0, -zw), (x1, y1, -zw + 0.6), "hullwhite"),         # sides
+        box((x0, y0, zw - 0.6), (x1, y1, zw), "hullwhite"),
+        box((x0, y0, -zw), (x0 + 0.6, y1, zw), "pad"),                # back wall, dark
+        # Beacons on the corners of the door.
+        ell((x1, y1 + 0.6, -zw), (0.6, 0.6, 0.6), "beacon"),
+        ell((x1, y1 + 0.6, zw), (0.6, 0.6, 0.6), "beacon"),
+    ]
     prims += [
         # Glowing ring around the hub, and the hub itself.
         torus_y((0, 4, 0), 6.2, 0.6, "glowring"),
@@ -203,7 +222,7 @@ def spaceport():
         # The big ring.
         torus_y((0, 0, 0), RING, 2.4, "hullwhite"),
     ]
-    size, vox, names = mm.build(prims, ((-29, 29), (-11, 15), (-29, 29)))
+    size, vox, names = mm.build(prims, ((-29, 31), (-11, 15), (-29, 29)))
     pal = {i + 1: hexrgb(mm.COLORS[n]) for i, n in enumerate(names)}
     vox = hollow({k: pal[c] for k, c in vox.items()})
     return vox

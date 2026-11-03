@@ -85,9 +85,15 @@ struct GameView: View {
             }
 
             if game.entryVeil > 0.001 {
-                AtmosphereVeil(veil: game.entryVeil, sky: game.planetSkyColor)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
+                Group {
+                    if game.fadeEntry {
+                        Color.black.opacity(Double(game.entryVeil))
+                    } else {
+                        AtmosphereVeil(veil: game.entryVeil, sky: game.planetSkyColor)
+                    }
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
             }
 
             if game.entryGlow {

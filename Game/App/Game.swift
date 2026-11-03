@@ -164,6 +164,8 @@ final class Game {
     @ObservationIgnored let spaceTraffic = ShipTraffic()
     @ObservationIgnored var stationHinted = false
     @ObservationIgnored var enteringStation = false
+    /// The veil is a plain quick fade (into the station), not clouds.
+    var fadeEntry = false
     /// Blocks falling down (see Game+Falling.swift).
     @ObservationIgnored let falling = FallingBlocks()
 

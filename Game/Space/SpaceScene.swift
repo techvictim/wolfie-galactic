@@ -41,7 +41,6 @@ final class SpaceScene {
     private var spaceport: Entity?
     private var shipModel: Entity?
     private var shipKind: VehicleKind?
-    private var dockModels: [Entity?] = []
     private var warpLines: [(entity: ModelEntity, speed: Float)] = []
     private var built = false
 
@@ -49,10 +48,6 @@ final class SpaceScene {
     static let voxelScale: Float = 14
     static let spaceportPosition = SIMD3<Float>(250, 110, -170)
     private static let spaceportScale: Float = 2
-    /// The docking pads, as (distance from the station's centre, angle), before scaling.
-    private static let pads: [(Float, Float)] = [(23, 0), (23, 2 * .pi / 3), (23, 4 * .pi / 3)]
-    /// How high the pads' decks are above the bottom of the station model, before scaling.
-    private static let padHeight: Float = 10.4
 
     /// Fixed directions for planets seen far away.
     private static let directions: [String: SIMD3<Float>] = [
@@ -113,9 +108,15 @@ final class SpaceScene {
 
         // The spaceport only orbits Wolfie World.
         if id == PlanetCatalog.shared.homeID {
-            if spaceport == nil, let station = DetailModels.entity(named: "spaceport") {
-                station.scale *= SpaceScene.spaceportScale
-                station.position = SpaceScene.spaceportPosition
+            if spaceport == nil, let model = DetailModels.entity(named: "spaceport") {
+                // The model is centred on its whole width, hangar and all; the ring's middle is
+                // 10.75 blocks back from there. Turned so the hangar door faces out.
+                let station = Entity()
+                model.scale *= SpaceScene.spaceportScale
+                model.position = SpaceScene.stationCenter - SIMD3(0, 21, 0) + SpaceScene.hangarDirection * 10.75
+                model.orientation = simd_quatf(angle: atan2(-SpaceScene.hangarDirection.z, SpaceScene.hangarDirection.x), axis: SIMD3(0, 1, 0))
+                station.addChild(model)
+                buildApproachLights(into: station)
                 root.addChild(station)
                 spaceport = station
             }
@@ -123,7 +124,6 @@ final class SpaceScene {
         } else {
             spaceport?.isEnabled = false
         }
-        for model in dockModels { model?.isEnabled = id == PlanetCatalog.shared.homeID }
     }
 
     /// A planet model centred on its holder, each voxel `voxel` blocks wide.
@@ -155,27 +155,48 @@ final class SpaceScene {
         shipModel?.isEnabled = false
     }
 
-    /// Where a docking pad's deck is, in space.
-    static func padPosition(_ index: Int) -> SIMD3<Float> {
-        let (distance, angle) = pads[index]
-        let s = spaceportScale
-        return spaceportPosition + SIMD3<Float>(cos(angle) * distance * s, padHeight * s, sin(angle) * distance * s)
+    // MARK: Wolfie Station's hangar door
+
+    /// The hangar door faces this way, out and away from Wolfie World.
+    static let hangarDirection = simd_normalize(SIMD3<Float>(0.827, 0, -0.562))
+    /// The middle of the station's ring, in space.
+    static var stationCenter: SIMD3<Float> { spaceportPosition + SIMD3(0, 21, 0) }
+    /// The middle of the hangar door, and how big it is (half width and half height).
+    static var hangarMouth: SIMD3<Float> { stationCenter + hangarDirection * 60 + SIMD3(0, 1, 0) }
+    static let mouthHalfWidth: Float = 12
+    static let mouthHalfHeight: Float = 9
+    /// Sideways, across the door.
+    static var hangarSide: SIMD3<Float> { SIMD3(-hangarDirection.z, 0, hangarDirection.x) }
+
+    private var approachLights: [(entity: ModelEntity, step: Int)] = []
+    private var lightClock: Float = 0
+
+    /// Two rows of lights leading in to the hangar door, chasing toward it, so you can see
+    /// where to go from far away.
+    private func buildApproachLights(into parent: Entity) {
+        let d = SpaceScene.hangarDirection, side = SpaceScene.hangarSide
+        let mouth = SpaceScene.hangarMouth
+        for step in 0..<10 {
+            let along = mouth + d * (14 + Float(step) * 14)
+            for s in [Float(-1), 1] {
+                for up in [Float(-1), 1] {
+                    let light = Shots.box(SIMD3(1.6, 1.6, 1.6),
+                                          along + side * s * (SpaceScene.mouthHalfWidth + 2) + SIMD3(0, up * (SpaceScene.mouthHalfHeight + 1), 0),
+                                          SIMD3(0.37, 0.94, 1))
+                    parent.addChild(light)
+                    approachLights.append((light, step))
+                }
+            }
+        }
     }
 
-    static var padCount: Int { pads.count }
-
-    /// Put ships on the spaceport's pads, noses pointing outward.
-    func showDocks(_ docked: [VehicleKind?]) {
-        for model in dockModels { model?.removeFromParent() }
-        dockModels = docked.enumerated().map { index, kind in
-            guard let kind, index < SpaceScene.pads.count, let model = DetailModels.entity(named: kind.modelName) else { return nil }
-            let angle = SpaceScene.pads[index].1
-            model.position = SpaceScene.padPosition(index)
-            // Nose (the model's +z) pointing away from the station.
-            model.orientation = simd_quatf(angle: .pi / 2 - angle, axis: SIMD3<Float>(0, 1, 0))
-            model.isEnabled = planetID == PlanetCatalog.shared.homeID
-            root.addChild(model)
-            return model
+    /// Run the lights in toward the door.
+    func updateStationLights(dt: Float) {
+        lightClock += dt
+        let lit = 9 - Int(lightClock * 8) % 10
+        for (light, step) in approachLights {
+            let on = step == lit || step == (lit + 1) % 10
+            light.scale = SIMD3(repeating: on ? 1.4 : 0.6)
         }
     }
 
