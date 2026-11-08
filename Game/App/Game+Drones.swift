@@ -81,6 +81,7 @@ extension Game {
         guard let drone = pilotDrone else { return }
         drone.clock += dt
         drone.battery -= dt
+        let settings = GameSettings.shared
         let lookY = frame.look.y * (settings.invertLook ? -1 : 1)
         drone.yaw += frame.look.x * settings.lookMultiplier
         drone.pitch = min(max(drone.pitch + lookY * settings.lookMultiplier, -1.3), 1.0)
