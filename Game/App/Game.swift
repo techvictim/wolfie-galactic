@@ -164,6 +164,9 @@ final class Game {
     @ObservationIgnored let spaceTraffic = ShipTraffic()
     @ObservationIgnored var stationHinted = false
     @ObservationIgnored var enteringStation = false
+    /// A drone you're flying (Bomber Drone or Boom Drone), and its line on the screen.
+    @ObservationIgnored var pilotDrone: PilotDrone?
+    var droneStatus: String?
     /// The veil is a plain quick fade (into the station), not clouds.
     var fadeEntry = false
     /// Blocks falling down (see Game+Falling.swift).
@@ -370,6 +373,12 @@ final class Game {
         renderer.reset(world: world)
         critters.reset(planet: planet.id)
         effects.clear()
+        if let drone = pilotDrone {
+            drone.entity.removeFromParent()
+            pilotDrone = nil
+            droneStatus = nil
+            Sound.shared.stopLoop(channel: "drone")
+        }
         armory.clear()
         roboCats.clear()
         falling.clear()
@@ -572,6 +581,19 @@ final class Game {
             updateSpace(frame, dt: dt)
             nearVehicle = nil
             updatePetPrompt(nil)
+            return
+        }
+
+        // Flying a drone: the controls fly it while you wait where you are.
+        if pilotDrone != nil {
+            updateDrone(frame, dt: dt)
+            nearVehicle = nil
+            ghost.isEnabled = false
+            highlight.isEnabled = false
+            hideLaser()
+            updatePickups(dt: dt)
+            updatePetPrompt(nil)
+            updateCritters(dt: dt, fallSpeed: 0, wasOnGround: true)
             return
         }
 

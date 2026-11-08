@@ -64,6 +64,7 @@ extension Game {
         case .projectile, .sticky, .mine: launch(def, aim: aim)
         case .strike: callStrike(def, aim: aim)
         case .blackhole: openBlackHole(def, aim: aim)
+        case .drone: launchDrone(def, aim: aim)
         case .flame: break
         }
     }

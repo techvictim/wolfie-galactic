@@ -193,6 +193,18 @@ struct HUDView: View {
                         .background(Capsule().fill(Color.black.opacity(0.45)))
                         .allowsHitTesting(false)
                     }
+                    if let drone = game.droneStatus {
+                        HStack(spacing: 8) {
+                            Image(systemName: "airplane")
+                            Text(drone)
+                        }
+                        .font(.game(15).weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(Color(red: 0.1, green: 0.35, blue: 0.45).opacity(0.75)))
+                        .allowsHitTesting(false)
+                    }
                     }
                     Spacer()
                     // Every control, behind one button: Create/View on a controller, ? on a keyboard.

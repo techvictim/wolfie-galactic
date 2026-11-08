@@ -147,6 +147,14 @@ MODELS = {
     "drones": [box((-4, -1, -4), (4, 3, 4), "steel"), box((-1, 3, -1), (1, 4, 1), "red"), box((-2, -2, -5), (2, 1, -4), "hazard")]
               + sum([[box((min(0, sx * 9), 0, min(0, sz * 9)), (max(0, sx * 9) + 1, 1.5, max(0, sz * 9) + 1), "dark"),
                       cyly(sx * 9, sz * 9, 4.5, 2, 2.8, "cyan")] for sx in (-1, 1) for sz in (-1, 1)], []),
+    "pilotdrone": [box((-4, -1, -4), (4, 3, 4), "olive"), box((-3, 3, -3), (3, 4, 3), "olived"), box((-1, 3.5, -5), (1, 4.5, -4), "cyan"),
+                   cyly(0, 0, 1.6, -6, -1, "dark"), ell((0, -7, 0), (2.2, 2.8, 2.2), "olived"), box((-2.4, -5, -0.4), (2.4, -4, 0.4), "hazard")]
+                  + sum([[box((min(0, sx * 9), 0, min(0, sz * 9)), (max(0, sx * 9) + 1, 1.5, max(0, sz * 9) + 1), "dark"),
+                          cyly(sx * 9, sz * 9, 4.5, 2, 2.8, "cyan")] for sx in (-1, 1) for sz in (-1, 1)], []),
+    "kamikaze": [stripes(box((-4, -1, -4), (4, 3, 4), "hazard"), 2, "black"), box((-4, -1, -4), (4, 3, 4), "hazard"),
+                 ell((0, 1, -6), (2.4, 2, 2.6), "red"), box((-1, 3, -1), (1, 4, 1), "red")]
+                + sum([[box((min(0, sx * 9), 0, min(0, sz * 9)), (max(0, sx * 9) + 1, 1.5, max(0, sz * 9) + 1), "dark"),
+                        cyly(sx * 9, sz * 9, 4.5, 2, 2.8, "orange")] for sx in (-1, 1) for sz in (-1, 1)], []),
     "meteor": [stripes(ell((0, 0, 0), (7, 6.5, 6.5), "lava"), 3, "rockd"), ell((0, 0, 0), (7, 6.5, 6.5), "rock"),
                ell((-11, 4, 0), (7, 4, 4), "fire"), ell((-18, 7, 0), (5, 3, 3), "orange"), ell((-23, 9, 0), (3, 2, 2), "yellow")],
     "mega": [box((-20, -0.6, -8), (-12, 0.6, 8), "dark"), box((-20, -8, -0.6), (-12, 8, 0.6), "dark"),
@@ -177,7 +185,7 @@ if __name__ == "__main__":
             picture = render(vox, pal, size=192, yaw=-130, pitch=24)
         elif wid in MODELS:
             vox = sample(MODELS[wid])
-            yaw = -20 if wid in ("grenade", "tnt", "remote", "cluster", "mines", "mortar", "missiles", "drones") else -32
+            yaw = -20 if wid in ("grenade", "tnt", "remote", "cluster", "mines", "mortar", "missiles", "drones", "pilotdrone", "kamikaze") else -32
             picture = render(vox, to_palette(vox), size=192, yaw=yaw, pitch=22)
         else:
             print("no model for", wid)

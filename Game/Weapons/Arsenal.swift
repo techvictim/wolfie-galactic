@@ -4,7 +4,7 @@ import Foundation
 /// so a new weapon only needs the numbers that make it different.
 struct WeaponDef: Decodable, Sendable, Identifiable {
     enum Kind: String, Decodable, Sendable {
-        case melee, flame, gun, projectile, sticky, mine, strike, blackhole
+        case melee, flame, gun, projectile, sticky, mine, strike, drone, blackhole
     }
 
     let id: String
