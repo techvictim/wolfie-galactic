@@ -267,6 +267,9 @@ extension Game {
         browser.onChange = { [weak self] games in
             self?.foundGames = games
         }
+        browser.onProblem = { [weak self] problem in
+            self?.wifiProblem = problem
+        }
         browser.start()
     }
 
@@ -283,6 +286,10 @@ extension Game {
         let host = NetHost()
         host.onMessage = { [weak self] id, message in self?.hostReceived(message, from: id) }
         host.onDisconnect = { [weak self] id in self?.friendLeft(id) }
+        host.onProblem = { [weak self] problem in
+            guard let self, let problem, self.session == .hosting else { return }
+            self.show(problem)
+        }
         host.onFailed = { [weak self] in
             self?.endSession()
             self?.show("Hosting stopped. Is Wi-Fi on?")

@@ -47,6 +47,8 @@ final class Game {
     var session: Session = .solo
     /// Games found on this Wi-Fi, for the Play together menu.
     var foundGames: [FoundGame] = []
+    /// Why Wi-Fi play isn't working, if something's blocking it.
+    var wifiProblem: String?
     /// Everyone else in the game.
     var players: [PlayerCard] = []
     /// Friends' names, placed over their heads.
@@ -960,7 +962,9 @@ final class Game {
         case .sayNo: return ("Not now", nil)
         case .inviteInfo: return ("Invite code", inviteCode)
         case .join(let name): return ("Join \(name)", nil)
-        case .searching: return ("Looking for games on this Wi-Fi…", nil)
+        case .searching:
+            if let wifiProblem { return ("Can't look on Wi-Fi", wifiProblem) }
+            return ("Looking for games on this Wi-Fi…", Cloud.shared.available ? "Not finding it? Use an invite code instead" : nil)
         case .yourName: return ("Your name", settings.playerNameText)
         case .music: return ("Music", GameSettings.musicLevelNames[min(max(settings.musicLevel, 0), 3)])
         case .soundEffects: return ("Sound effects", settings.soundEffects ? "On" : "Off")

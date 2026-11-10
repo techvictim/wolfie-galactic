@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// Playing together on the same Wi-Fi. One device hosts: its world is the real one.
 /// Friends join, get a copy of the world, and from then on everyone sends where they are
@@ -6,6 +7,18 @@ import Foundation
 enum Net {
     /// Bonjour name the host advertises. Also listed in Info.plist (NSBonjourServices).
     static let serviceType = "_wolfiegalactic._tcp"
+
+    /// Plain words for why Wi-Fi play is blocked.
+    static func explain(_ error: NWError) -> String {
+        if case let .dns(code) = error, code == -65570 {   // kDNSServiceErr_PolicyDenied
+            #if os(macOS)
+            return "Wolfie Galactic isn't allowed on your Wi-Fi. Turn it on in System Settings › Privacy & Security › Local Network"
+            #else
+            return "Wolfie Galactic isn't allowed on your Wi-Fi. Turn it on in Settings › Privacy & Security › Local Network"
+            #endif
+        }
+        return "Wi-Fi play can't start (\(error.localizedDescription))"
+    }
     /// Bump when messages change, so old and new versions don't try to play together.
     static let version = 5
     /// How often each player sends where they are.
